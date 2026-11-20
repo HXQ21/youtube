@@ -1,0 +1,11 @@
+[
+  { "n": 1, "dish": "Chocolate chip cookie", "slug": "chocolate-chip-cookie", "date": "2026-11-18",
+    "question": "Was the chocolate chip cookie really an accident?", "axis": "mystery with an answer (the 'accident' legend checked)",
+    "hook": "The most famous accident in baking probably wasn't an accident.", "sourceConfidence": "high", "buildEffort": "low-medium" },
+  { "n": 2, "dish": "Fortune cookie", "slug": "fortune-cookie", "date": "2026-11-18",
+    "question": "Where does the fortune cookie really come from?", "axis": "transformation journey",
+    "hook": "The fortune cookie isn't Chinese.", "sourceConfidence": "medium", "buildEffort": "high" },
+  { "n": 3, "dish": "Hamburger", "slug": "hamburger", "date": "2026-11-18",
+    "question": "Who made the hamburger America's food?", "axis": "people solving a problem",
+    "hook": "Americans once didn't trust hamburger meat.", "sourceConfidence": "medium", "buildEffort": "medium-high" }
+]

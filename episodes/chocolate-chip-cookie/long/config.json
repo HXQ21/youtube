@@ -1,0 +1,14 @@
+{
+ "format": "long",
+ "render": {},
+ "leadInSec": 0.6,
+ "tailPadSec": 2,
+ "estimateWpm": 151,
+ "music": {
+  "style": "cafe",
+  "gainDb": -22,
+  "duckDb": -9,
+  "file": null
+ },
+ "sfxGainDb": -14
+}

@@ -2,6 +2,22 @@ node_modules
 dist
 .DS_Store
 .env
+.env.local
+.env.*.local
+.cache
 
-# Ignore the output video from Git but not videos you import into src/.
+# Kết quả render và file tạm
+public/_preview
+episodes/*/*/*.studio.props.json
 out
+assets-src
+
+# Giọng đọc đã tạo (tốn credit, tái tạo được từ cache cục bộ) và âm thanh trung gian
+episodes/*/*/voice/cache
+episodes/*/*/audio
+
+# Không đưa lên GitHub: giọng đọc thật (nặng, giữ trên máy), props sinh tự động, bản nướng sáng thử, trạng thái web
+episodes/*/*/voice/*.wav
+episodes/*/*/*.props.json
+public/_blender
+data/claude-thread.json
