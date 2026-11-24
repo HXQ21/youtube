@@ -1,6 +1,6 @@
 // The film assembly (2026-11-24, no three.js): the picture comes from finished clips (Blender layout renders or the
 // Seedance re-renders made from them); this composition only lays them on the voice timeline and draws the 2D layer:
-// transitions (cut / dip / whip / dissolve + flash events), the legend storybook frame, place-and-date labels,
+// transitions (cut / dip / whip / dissolve + flash and kick events), the legend storybook frame, place-and-date labels,
 // captions (Shorts: 1-3 word chunks; long: lines) and a DRAFT badge. Sound is mixed separately and muxed later.
 import React, { useMemo } from "react";
 import { AbsoluteFill, Audio, CalculateMetadataFunction, OffthreadVideo, Sequence, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
@@ -69,13 +69,19 @@ export const FoodAssembly: React.FC<AssemblyProps> = ({ timeline: tl, pictures, 
   const dip = Math.max(shot.transition === "dip" ? Math.max(0, 1 - (f - shot.a + 1) / DIP) : 0, next && next.transition === "dip" ? Math.max(0, 1 - (shot.b - f) / DIP) : 0);
   const fl = tl.events.find((e) => e.type === "action" && e.name === "flash" && f >= e.frame && f < e.frame + 5);
   const flash = fl ? [1, 0.8, 0.5, 0.28, 0.1][f - fl.frame] : 0;
+  // "kick" on an impact word: a short decaying frame shake, as the three.js camera did (direct.ts shake): translation
+  // only, 0.45 s, with a slight zoom so the picture edge never shows
+  let kick = 0, ph = 0;
+  for (const e of tl.events) if (e.type === "action" && e.name === "kick") { const dt = (f - e.frame) / tl.fps; if (dt >= 0 && dt < 0.45) { const k = (1 - dt / 0.45) ** 2; if (k > kick) { kick = k; ph = dt; } } }
+  const kx = Math.sin(ph * 70) * 1.4 * kick, ky = Math.cos(ph * 53) * 1.4 * kick;
   const whipIn = shot.transition === "whip" && f - shot.a < WHIP ? 1 - (f - shot.a) / WHIP : 0;
   const whipOut = next && next.transition === "whip" && shot.b - f <= WHIP ? 1 - (shot.b - f - 1) / WHIP : 0, whip = Math.max(whipIn, whipOut);
   const filters = [shot.legend ? "sepia(0.6) saturate(0.85) contrast(0.96)" : "", whip > 0 ? `blur(${(whip * height * 0.02).toFixed(1)}px)` : ""].filter(Boolean).join(" ");
   const draft = mode !== "final" && (tl.timing === "estimated" || tl.placeholders.length > 0 || pictures.length === 0);
   return (
     <AbsoluteFill style={{ background: PAPER }}>
-      <AbsoluteFill style={{ filter: filters || undefined, transform: whip > 0 ? `translateX(${((whipIn - whipOut) * 16).toFixed(2)}%) scale(${(1 + 0.34 * whip).toFixed(3)})` : undefined }}>
+      <AbsoluteFill style={{ filter: filters || undefined, transform: whip > 0 ? `translateX(${((whipIn - whipOut) * 16).toFixed(2)}%) scale(${(1 + 0.34 * whip).toFixed(3)})`
+        : kick > 0 ? `translate(${kx.toFixed(2)}%, ${ky.toFixed(2)}%) scale(${(1 + 0.03 * kick).toFixed(3)})` : undefined }}>
         {pictures.map((p, k) => {
           const pre = shotAt(tl, p.from).transition === "dissolve" ? DISSOLVE / 2 : 0, post = tl.shots.find((s) => s.a === p.from + p.frames)?.transition === "dissolve" ? DISSOLVE / 2 : 0;
           const a = Math.max(0, p.from - pre), dur = p.frames + (p.from - a) + post;

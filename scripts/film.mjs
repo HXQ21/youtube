@@ -34,6 +34,15 @@ const castRefs = (cast) => {
   return { refs: r.files.map((f) => path.join(CAST_SHEETS, f)), missing: r.missing };
 };
 
+/** version of a set: its .blend, its pose module and shot.py. A guide records it; when the set changes later, clips
+ *  made from the old guide are flagged for another look (the cut is the same, the picture may not be) */
+const setVersion = (scene) => {
+  const h = crypto.createHash("sha1");
+  for (const f of [path.join(SETS, `${scene}.blend`), path.join(SETS, `${scene}.py`), path.join(ROOT, "blender", "shot.py")]) if (fs.existsSync(f)) h.update(fs.readFileSync(f));
+  return h.digest("hex").slice(0, 12);
+};
+const probeSec = (f) => { const r = spawnSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", f], { encoding: "utf8" }); return Number(r.stdout.trim()) || 0; };
+
 const ctx = () => {
   if (!args.episode) throw new ConfigError("Thiếu --episode <slug>");
   const format = String(args.format ?? "short");
@@ -82,7 +91,7 @@ const guide = () => {
       const ff = spawnSync("ffmpeg", ["-y", "-hide_banner", "-loglevel", "error", "-framerate", String(c.tl.fps), "-i", path.join(fdir, "f%04d.png"), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", out]);
       if (ff.status !== 0) throw new Error(`ffmpeg lỗi khi ghép ${g.id}`);
       const castFile = path.join(fdir, "cast.json"), cast = fs.existsSync(castFile) ? readJson(castFile) : [];
-      writeJson(path.join(c.dir, "guide", `${g.id}.json`), { key: segmentKey(c.tl, g), cast, quality: q, a: g.a, b: g.b, genSec: g.genSec, shots: g.shots, at: new Date().toISOString() });
+      writeJson(path.join(c.dir, "guide", `${g.id}.json`), { key: segmentKey(c.tl, g), set: setVersion(g.scene), cast, quality: q, a: g.a, b: g.b, genSec: g.genSec, shots: g.shots, at: new Date().toISOString() });
     }
     console.log(`${g.id}: ${args.frames ? `khung ${args.frames}` : rel(out)} (${((Date.now() - t0) / 1000).toFixed(0)}s)`);
   }
@@ -102,12 +111,14 @@ const ai = () => {
     if (!fs.existsSync(gv)) throw new ConfigError(`Chưa có bản mốc ${rel(gv)}: chạy film.mjs guide --segment ${g.id}`);
     const key = segmentKey(c.tl, g), gm = sidecar(c, "guide", g.id), done = sidecar(c, "ai", g.id);
     if (gm?.key !== key) throw new ConfigError(`Bản mốc ${g.id} làm cho bản cắt cũ (timeline đã đổi trong đoạn này): chạy lại film.mjs guide --segment ${g.id}`);
+    if (gm.set !== setVersion(g.scene) && !args.force) throw new ConfigError(`Bối cảnh ${g.scene} đã đổi sau khi dựng bản mốc ${g.id}: chạy lại film.mjs guide --segment ${g.id} trước khi tốn credit`);
+    if (gm.quality === "draft" && args.run && !args["allow-draft-guide"]) console.log(`  chú ý: bản mốc ${g.id} là bản nháp (nửa kích thước); nên dựng --quality preview trước khi tạo`);
     if (done?.key === key && done.approved && !args.force) { console.log(`${g.id}: đã có clip được duyệt cho đúng đoạn này, bỏ qua`); continue; }
     const cr = castRefs(gm.cast);
     if (cr.missing.length) throw new ConfigError(`Đoạn ${g.id} có nhân vật chưa có bảng mẫu: ${cr.missing.join(", ")}. Dựng bằng: blender -b --python blender/castsheet.py -- --who <tên> --v <số> --out out/_cast_brand/<tên>-v<số>.png`);
     const ratio = c.tl.width > c.tl.height ? "16:9" : c.tl.width === c.tl.height ? "1:1" : "9:16";
     const gen = ["--project-id", st.projectId, "--model", model, "--mode", "m2v", "--ratio", ratio, "--resolution", "720p", "--duration", String(g.genSec),
-      "--ref", `res:${up(gv)}`, ...[...cr.refs, ...refsExtra].flatMap((f) => ["--ref", `res:${up(f)}`]), "--prompt", aiPrompt(g, byId, c.tl.fps)];
+      "--ref", `res:${up(gv)}`, ...[...cr.refs, ...refsExtra].flatMap((f) => ["--ref", `res:${up(f)}`]), "--prompt", aiPrompt(g, byId, c.tl.fps, cr.refs.length > 0)];
     st.nodes ??= {};
     const nodeKey = `${g.id}|${model}`;
     const node = st.nodes[nodeKey] ? dm(["node", "edit", "video", "--node-id", st.nodes[nodeKey], ...gen]).node.nodeId : dm(["node", "create", "video", "--title", `${c.slug} ${g.id}`, "--x", "0", "--y", "0", ...gen]).node.nodeId;
@@ -119,8 +130,13 @@ const ai = () => {
     const ceiling = Number(args["credit-ceiling"]);
     if (!Number.isFinite(ceiling)) throw new ConfigError("--run cần --credit-ceiling <số credit đã duyệt>");
     if (total > ceiling) throw new ConfigError(`Tổng báo giá ${total} vượt mức duyệt ${ceiling}. Dừng trước ${g.id}.`);
+    // a previous --run that was interrupted may still be generating on this node: wait for it instead of paying twice
+    const before = dm(["node", "show", "--project-id", st.projectId, "--node-id", node]).nodes[0].node;
+    if (["running", "queued", "pending", "processing", "submitted"].includes(before.status)) console.log(`  ${g.id}: node đang chạy từ lần trước (${before.status}), chờ kết quả thay vì gửi lại`);
+    else {
     const conf = q.confirmationRequired ? dm(["node", "confirm", "--project-id", st.projectId, "--node-id", node, "--credit-ceiling", String(ceiling)]) : {};
     dm(["node", "run", "--project-id", st.projectId, "--node-id", node, "--submit-id", crypto.randomUUID(), ...(conf.creditConfirmationToken ? ["--credit-token", conf.creditConfirmationToken] : [])]);
+    }
     const t0 = Date.now(); let n;
     for (;;) {
       n = dm(["node", "show", "--project-id", st.projectId, "--node-id", node]).nodes[0].node;
@@ -133,10 +149,10 @@ const ai = () => {
     const out = path.join(c.dir, "ai", `${g.id}.mp4`), part = `${out}.part`;
     fs.mkdirSync(path.dirname(out), { recursive: true }); fs.rmSync(part, { force: true });
     dm(["resource", "download", r.resourceId, "--project-id", st.projectId, "-o", part]); fs.renameSync(part, out);
-    writeJson(out.replace(/\.mp4$/, ".json"), { key, guide: gm, prompt: aiPrompt(g, byId, c.tl.fps), model, nodeId: node, credits: q.totalMaxCredits, approved: false, at: new Date().toISOString() });
+    writeJson(out.replace(/\.mp4$/, ".json"), { key, guide: gm, prompt: aiPrompt(g, byId, c.tl.fps, cr.refs.length > 0), model, nodeId: node, credits: q.totalMaxCredits, approved: false, at: new Date().toISOString() });
     console.log(`  -> ${rel(out)} (chưa duyệt: xem rồi chạy film.mjs approve --segment ${g.id})`);
   }
-  console.log(`Tổng báo giá ${segs.length} đoạn: ${total} credit.${args.run ? "" : ` Chưa tạo. Khi đã duyệt: node scripts/film.mjs ai --episode ${c.slug}${args.segment ? ` --segment ${args.segment}` : ""} --run --credit-ceiling ${total}`}`);
+  console.log(`Tổng báo giá ${segs.length} đoạn: ${total} credit.${args.run ? "" : ` Chưa tạo. Khi đã duyệt (cùng đoạn, mẫu, model, format như lúc báo giá): node scripts/film.mjs ai --episode ${c.slug} --format ${c.format}${args.segment ? ` --segment ${args.segment}` : ""} --model ${model}${args.refs ? ` --refs "${args.refs}"` : ""} --run --credit-ceiling ${total}`}`);
 };
 
 // ------------------------------------------------------------------ approve: the user watched these clips and accepts them
@@ -161,7 +177,14 @@ const assemble = async () => {
   const pics = picturesFor(segs, (g) => {
     const key = segmentKey(c.tl, g), m = { ai: sidecar(c, "ai", g.id), guide: sidecar(c, "guide", g.id) };
     if ((m.ai && m.ai.key !== key) || (m.guide && m.guide.key !== key)) stale.push(g.id);
-    return chooseClip(g, key, m, final);
+    const pick1 = chooseClip(g, key, m, final);
+    if (pick1) {
+      const sec = probeSec(path.join(c.dir, pick1.src));
+      if (sec + 1 / c.tl.fps < g.sec) throw new ConfigError(`${pick1.src} chỉ dài ${sec.toFixed(2)}s, đoạn ${g.id} cần ${g.sec}s`);
+      const madeWith = pick1.kind === "ai" ? m.ai.guide?.set : m.guide?.set;
+      if (madeWith && madeWith !== setVersion(g.scene)) console.log(`Chú ý: bối cảnh ${g.scene} đã đổi sau khi làm ${pick1.src}; xem lại đoạn ${g.id}`);
+    }
+    return pick1;
   });
   if (stale.length) console.log(`Bỏ qua clip cũ (làm cho bản cắt trước): ${[...new Set(stale)].join(", ")}`);
   const missing = segs.filter((_, i) => !pics[i]).map((g) => g.id);

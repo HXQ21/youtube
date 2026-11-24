@@ -111,10 +111,14 @@ export const shotText = (s) => {
   return `A shot in the ${s.scene} set`;
 };
 
-/** the Seedance prompt for one segment: what happens (from structured params), the clip length, the look, the rules */
-export const aiPrompt = (seg, shotsById, fps = 30) => {
+/** what each reference is for (BytePlus: give every reference one role) */
+export const REF_ROLES = (sheets) => "Use the reference video only for layout, timing, camera motion and what every object and character does."
+  + (sheets ? " Use the reference images only for how the characters look (one design sheet per character type): copy their design, not the sheet's poses, labels or background." : "");
+
+/** the Seedance prompt for one segment: what happens (from structured params), the clip length, the references, the look, the rules */
+export const aiPrompt = (seg, shotsById, fps = 30, sheets = false) => {
   const shots = seg.shots.map((id) => shotsById[id]).filter(Boolean);
   const parts = shots.map((s, i) => `${shots.length > 1 ? `Shot ${i + 1} (${((s.b - s.a) / fps).toFixed(1)} s): ` : ""}${shotText(s)}${s.ai ? `. ${s.ai}` : ""}.`);
   const hold = seg.genSec > seg.sec + 0.05 ? ` The story lasts the first ${seg.sec.toFixed(1)} s; after that the reference holds the last shot, keep it calm and continuous.` : "";
-  return [parts.join(" "), `The clip is ${seg.genSec} s.${hold}`, AI_LOOK, AI_KEEP].join(" ");
+  return [parts.join(" "), `The clip is ${seg.genSec} s.${hold}`, REF_ROLES(sheets), AI_LOOK, AI_KEEP].join(" ");
 };
