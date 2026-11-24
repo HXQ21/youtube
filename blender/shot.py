@@ -46,7 +46,8 @@ def cam_spec(c, cams):
     return (c["from"], c["to"], c.get("ease", "smooth"))
 
 
-ON_TWOS = 2
+ON_TWOS = 1          # characters change pose every frame (2 read as stutter next to a moving camera, #23)
+DRIFT_PUSH, DRIFT_SIDE = 0.08, 0.03
 
 
 class Cast:
@@ -158,10 +159,19 @@ def main():
         lb, qb, _ = B.matrix_world.decompose()
         rc.location = la.lerp(lb, k)
         rc.rotation_quaternion = qa_.slerp(qb, k)
+        if A is B and not s.get("static"):
+            # one camera and no CAM-<name>End: a slow push-in and sideways drift so the shot is never a frozen frame
+            # (like three.js stage.ts drift; here 8 % toward the subject, 3 % sideways). The CAM's custom props push/side tune it.
+            d = A.data.dof.focus_distance if A.data.dof.focus_distance > 0.05 else 3.0
+            fwd, right = qa_ @ Vector((0.0, 0.0, -1.0)), qa_ @ Vector((1.0, 0.0, 0.0))
+            sm = EASE["smooth"](u)
+            rc.location = la + fwd * (d * float(A.get("push", DRIFT_PUSH)) * sm) + right * (d * float(A.get("side", DRIFT_SIDE)) * (sm - 0.5))
         rc.data.lens = A.data.lens + (B.data.lens - A.data.lens) * k
         rc.data.sensor_height = A.data.sensor_height
         rc.data.dof.focus_distance = A.data.dof.focus_distance + (B.data.dof.focus_distance - A.data.dof.focus_distance) * k
         rc.data.dof.aperture_fstop = A.data.dof.aperture_fstop + (B.data.dof.aperture_fstop - A.data.dof.aperture_fstop) * k
+        if A is B and not s.get("static"):
+            rc.data.dof.focus_distance = max(0.05, rc.data.dof.focus_distance - d * float(A.get("push", DRIFT_PUSH)) * sm)   # keep the subject sharp
         for key in ("location", "rotation_quaternion"):
             rc.keyframe_insert(key, frame=fr)
         for key in ("lens", "dof.focus_distance", "dof.aperture_fstop"):

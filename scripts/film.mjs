@@ -90,6 +90,10 @@ const guide = () => {
     if (!args.frames) {
       const ff = spawnSync("ffmpeg", ["-y", "-hide_banner", "-loglevel", "error", "-framerate", String(c.tl.fps), "-i", path.join(fdir, "f%04d.png"), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", out]);
       if (ff.status !== 0) throw new Error(`ffmpeg lỗi khi ghép ${g.id}`);
+      // frozen check (#23): any stretch of 0.5 s or more with no visible change inside the story part of the segment
+      const fz = spawnSync("ffmpeg", ["-hide_banner", "-i", out, "-t", String(g.sec), "-vf", "freezedetect=n=0.002:d=0.5", "-map", "0:v", "-f", "null", "-"], { encoding: "utf8" });
+      const frozen = [...`${fz.stderr}`.matchAll(/freeze_duration: ([\d.]+)/g)].reduce((n, m) => n + Number(m[1]), 0);
+      if (frozen > 0) console.log(`  CHÚ Ý ${g.id}: ${frozen.toFixed(1)}s / ${g.sec}s đứng yên (mục tiêu ≤ 3 %): thêm chuyển động máy (CAM-<tên>End, push/side) hoặc động tác`);
       const castFile = path.join(fdir, "cast.json"), cast = fs.existsSync(castFile) ? readJson(castFile) : [];
       writeJson(path.join(c.dir, "guide", `${g.id}.json`), { key: segmentKey(c.tl, g), set: setVersion(g.scene), cast, quality: q, a: g.a, b: g.b, genSec: g.genSec, shots: g.shots, at: new Date().toISOString() });
     }
