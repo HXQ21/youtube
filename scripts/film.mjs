@@ -17,7 +17,7 @@ import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { ROOT, PRESETS, ConfigError, loadEpisode, outDir, readJson, writeJson } from "./lib/config.mjs";
 import { resolveSlug } from "./lib/pipeline.mjs";
-import { planSegments, picturesFor, aiPrompt, segmentKey, chooseClip } from "./lib/film.mjs";
+import { planSegments, picturesFor, aiPrompt, segmentKey, chooseClip, pickCastSheets } from "./lib/film.mjs";
 import { dm } from "./lib/dreamina.mjs";
 import { findBlender } from "./lib/blender-exe.mjs";
 
@@ -25,7 +25,14 @@ const args = {}; const av = process.argv.slice(2), cmd = av[0] && !av[0].startsW
 for (let i = 0; i < av.length; i++) if (av[i].startsWith("--")) args[av[i].slice(2)] = av[i + 1] && !av[i + 1].startsWith("--") ? av[++i] : true;
 const rel = (p) => path.relative(ROOT, p).split(path.sep).join("/");
 const SETS = path.join(ROOT, "blender", "sets");
-const BRAND_REFS = [path.join(ROOT, "..", "..", "brand", "character", "stick-turnaround.png")];
+// character references for Seedance: the cast sheets of the people actually on screen in the segment (shot.py writes
+// guide/sNN/cast.json), drawn by the same code as the guides (blender/castsheet.py -> out/_cast_brand/<who>-v<v>.png).
+// No fixed sheet: the old brand turnaround shows the narrator, who is not in the films, and Seedance would add her.
+const CAST_SHEETS = path.join(ROOT, "out", "_cast_brand"), MAX_CAST_REFS = 3;
+const castRefs = (cast) => {
+  const sheets = fs.existsSync(CAST_SHEETS) ? fs.readdirSync(CAST_SHEETS) : [], r = pickCastSheets(cast, sheets, MAX_CAST_REFS);
+  return { refs: r.files.map((f) => path.join(CAST_SHEETS, f)), missing: r.missing };
+};
 
 const ctx = () => {
   if (!args.episode) throw new ConfigError("Thiếu --episode <slug>");
@@ -74,7 +81,8 @@ const guide = () => {
     if (!args.frames) {
       const ff = spawnSync("ffmpeg", ["-y", "-hide_banner", "-loglevel", "error", "-framerate", String(c.tl.fps), "-i", path.join(fdir, "f%04d.png"), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", out]);
       if (ff.status !== 0) throw new Error(`ffmpeg lỗi khi ghép ${g.id}`);
-      writeJson(path.join(c.dir, "guide", `${g.id}.json`), { key: segmentKey(c.tl, g), quality: q, a: g.a, b: g.b, genSec: g.genSec, shots: g.shots, at: new Date().toISOString() });
+      const castFile = path.join(fdir, "cast.json"), cast = fs.existsSync(castFile) ? readJson(castFile) : [];
+      writeJson(path.join(c.dir, "guide", `${g.id}.json`), { key: segmentKey(c.tl, g), cast, quality: q, a: g.a, b: g.b, genSec: g.genSec, shots: g.shots, at: new Date().toISOString() });
     }
     console.log(`${g.id}: ${args.frames ? `khung ${args.frames}` : rel(out)} (${((Date.now() - t0) / 1000).toFixed(0)}s)`);
   }
@@ -87,7 +95,7 @@ const ai = () => {
   if (!st.projectId) { const d = dm(["canvas", "create", `Crumb Trail - ${c.slug} ${c.format}`]); st.projectId = d.project.projectId; st.webUrl = d.project.webUrl; writeJson(stFile, st); }
   const up = (file) => { const sig = `${file}|${fs.statSync(file).mtimeMs}`; if (!st.refs[sig]) { st.refs[sig] = dm(["resource", "upload", "--project-id", st.projectId, "--file", file]).resourceId; writeJson(stFile, st); } return st.refs[sig]; };
   const byId = Object.fromEntries(c.tl.shots.map((s) => [s.id, s]));
-  const refsExtra = [...BRAND_REFS, ...String(args.refs ?? "").split(",").filter(Boolean).map((f) => path.resolve(ROOT, f))].filter((f) => fs.existsSync(f));
+  const refsExtra = String(args.refs ?? "").split(",").filter(Boolean).map((f) => path.resolve(ROOT, f)).filter((f) => fs.existsSync(f));
   let total = 0;
   for (const g of segs) {
     const gv = path.join(c.dir, "guide", `${g.id}.mp4`);
@@ -95,16 +103,18 @@ const ai = () => {
     const key = segmentKey(c.tl, g), gm = sidecar(c, "guide", g.id), done = sidecar(c, "ai", g.id);
     if (gm?.key !== key) throw new ConfigError(`Bản mốc ${g.id} làm cho bản cắt cũ (timeline đã đổi trong đoạn này): chạy lại film.mjs guide --segment ${g.id}`);
     if (done?.key === key && done.approved && !args.force) { console.log(`${g.id}: đã có clip được duyệt cho đúng đoạn này, bỏ qua`); continue; }
+    const cr = castRefs(gm.cast);
+    if (cr.missing.length) throw new ConfigError(`Đoạn ${g.id} có nhân vật chưa có bảng mẫu: ${cr.missing.join(", ")}. Dựng bằng: blender -b --python blender/castsheet.py -- --who <tên> --v <số> --out out/_cast_brand/<tên>-v<số>.png`);
     const ratio = c.tl.width > c.tl.height ? "16:9" : c.tl.width === c.tl.height ? "1:1" : "9:16";
     const gen = ["--project-id", st.projectId, "--model", model, "--mode", "m2v", "--ratio", ratio, "--resolution", "720p", "--duration", String(g.genSec),
-      "--ref", `res:${up(gv)}`, ...refsExtra.flatMap((f) => ["--ref", `res:${up(f)}`]), "--prompt", aiPrompt(g, byId, c.tl.fps)];
+      "--ref", `res:${up(gv)}`, ...[...cr.refs, ...refsExtra].flatMap((f) => ["--ref", `res:${up(f)}`]), "--prompt", aiPrompt(g, byId, c.tl.fps)];
     st.nodes ??= {};
     const nodeKey = `${g.id}|${model}`;
     const node = st.nodes[nodeKey] ? dm(["node", "edit", "video", "--node-id", st.nodes[nodeKey], ...gen]).node.nodeId : dm(["node", "create", "video", "--title", `${c.slug} ${g.id}`, "--x", "0", "--y", "0", ...gen]).node.nodeId;
     st.nodes[nodeKey] = node; writeJson(stFile, st);
     const q = dm(["node", "quote", "--project-id", st.projectId, "--node-id", node]);
     total += q.totalMaxCredits;
-    console.log(`${g.id} (${g.genSec}s, ${g.scene}): ${q.totalMaxCredits} credit`);
+    console.log(`${g.id} (${g.genSec}s, ${g.scene}): ${q.totalMaxCredits} credit; mẫu nhân vật: ${cr.refs.map((f) => path.basename(f)).join(", ") || "không (đoạn không có người)"}`);
     if (!args.run) continue;
     const ceiling = Number(args["credit-ceiling"]);
     if (!Number.isFinite(ceiling)) throw new ConfigError("--run cần --credit-ceiling <số credit đã duyệt>");

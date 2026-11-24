@@ -63,6 +63,18 @@ export const chooseClip = (g, key, manifests, final) => {
   return null;
 };
 
+/** cast sheets for the people on screen (cast = shot.py's cast.json: [{who, v, frames}]), most screen time first, one
+ *  sheet per character type: the exact variant when it has a sheet, else any sheet of that type */
+export const pickCastSheets = (cast, sheets, max = 3) => {
+  const ok = sheets.filter((f) => /^[a-z]+-v\d+\.png$/.test(f)), files = [], missing = [];
+  const order = [...(cast ?? [])].sort((x, y) => y.frames - x.frames);
+  for (const who of [...new Set(order.map((c) => c.who))]) {
+    const f = order.filter((c) => c.who === who).map((c) => `${who}-v${c.v}.png`).find((x) => ok.includes(x)) ?? ok.find((x) => x.startsWith(`${who}-v`));
+    if (f) files.push(f); else missing.push(who);
+  }
+  return { files: files.slice(0, max), missing };
+};
+
 // ---------------------------------------------------------------- Seedance prompt
 // Only what the picture model needs: subject, action, place, camera, references, what may change. Editing notes,
 // captions, emphasis words, signs and the legend sepia stay in Remotion (2026-11-24 review: s06 got the editor's
@@ -71,7 +83,7 @@ export const AI_LOOK = "Re-render this layout as a polished stylised 3D cartoon 
   + "with soft shadows and gentle bounce light, cooler shade, clean hand-painted materials (wood grain, brick, plaster, stone, flour, copper), "
   + "rich but natural colours, light atmosphere and depth. Not photorealistic: no grime, no film grain, no lens flares. Full natural colour (no sepia, no vignette).";
 export const AI_KEEP = "Keep exactly: the camera path and timing of the reference video, the composition, every object's position, the characters' positions, poses, actions "
-  + "and expressions. The flat 2D stick-figure characters stay flat 2D cartoon cards with bold ink outlines, drawn like the character reference sheet; "
+  + "and expressions. The flat 2D stick-figure characters stay flat 2D cartoon cards with bold ink outlines, drawn exactly like the character reference sheets (one sheet per character type); "
   + "do not turn them into 3D people. No text, letters, logos or captions anywhere, and no extra characters. Keep any cut exactly where it is.";
 
 const ITEMS = { croissant: "a golden croissant", kipferl: "a crescent-shaped Viennese kipferl bread roll", cut: "a croissant broken in half showing its flaky layered inside",

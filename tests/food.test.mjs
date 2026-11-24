@@ -318,6 +318,11 @@ test("film: AI segments never cross a location or a shot, stay <= 15 s, and shor
   assert.equal(film.chooseClip(s2[0], k, { ai: m("old", true), guide: m("old") }, false), null);
   const pics = film.picturesFor(s2, (g) => (g.id === "s01" ? { src: "ai/s01.mp4", kind: "ai", approved: true } : null));
   assert.deepEqual(pics.map((p) => p && p.kind), ["ai", null, null, null]);
+  // Seedance gets the cast sheets of who is on screen, longest screen time first; a type with no sheet is reported
+  const cs = film.pickCastSheets([{ who: "paris", v: 7, frames: 30 }, { who: "officer", v: 1, frames: 90 }, { who: "paris", v: 2, frames: 5 }],
+    ["baker-v0.png", "paris-v1.png", "paris-v2.png", "lineup.jpg"]);
+  assert.deepEqual(cs, { files: ["paris-v2.png"], missing: ["officer"] });
+  assert.deepEqual(film.pickCastSheets([], ["baker-v0.png"]), { files: [], missing: [] });
   // the Seedance prompt comes from structured params, never the editor's note, and never asks for sepia or text
   const pr = film.aiPrompt(s2[0], Object.fromEntries(tl2.shots.map((x) => [x.id, x])));
   assert.match(pr, /Vienna street/); assert.doesNotMatch(pr, /note v/); assert.match(pr, /no sepia/); assert.match(pr, /first 2\.0 s/);

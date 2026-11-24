@@ -181,6 +181,10 @@ def main():
             c.show(fr, f, poses.get(cid), cam_pos)
     for c in people.values():
         c.finish()
+    # who is actually on screen in this segment: film.mjs sends their cast sheets (not a fixed sheet) to Seedance
+    os.makedirs(out, exist_ok=True)
+    seen = [{"id": c.cid, "who": c.who, "v": c.v, "frames": sum(1 for k in c.shown.values() if k is not None)} for c in people.values()]
+    json.dump([x for x in seen if x["frames"]], open(os.path.join(out, "cast.json"), "w", encoding="utf-8"), indent=1)
     # quick layout render: Eevee, few samples; no ink, no grade (Seedance paints the final look)
     for eng in ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE"):
         try:
