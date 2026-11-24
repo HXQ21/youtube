@@ -300,7 +300,25 @@ test("film: AI segments never cross a location or a shot, stay <= 15 s, and shor
   assert.ok(s.every((g) => g.genSec >= 4 && g.genSec <= 15 && g.genSec >= g.sec - 1e-6));
   assert.equal(s[2].genSec, 4);                                    // a 1 s street insert is made at 4 s and trimmed
   assert.throws(() => film.planSegments({ fps: 30, shots: [shot("x", "bakery", 0, 16 * 30)] }), /15s/);
-  const pics = film.picturesFor(s, (f) => f === "ai/s01.mp4" || f === "guide/s02.mp4");
-  assert.deepEqual(pics.map((p) => p && p.kind), ["ai", "guide", null, null]);
-  assert.match(film.aiPrompt(s[0], Object.fromEntries(tl.shots.map((x) => [x.id, x]))), /note a \| note b.*Keep exactly/);
+  // a new segment at every change of city, era or legend status, even inside one set
+  const tl2 = { fps: 30, width: 1080, height: 1920, events: [{ type: "action", name: "kick", frame: 40 }], shots: [
+    { ...shot("v", "street", 0, 60), params: { place: "vienna" } }, { ...shot("p", "street", 60, 120), params: { place: "paris" } },
+    { ...shot("l", "page", 120, 180), legend: true, params: {} }, { ...shot("d", "page", 180, 240), params: {} }] };
+  const s2 = film.planSegments(tl2);
+  assert.deepEqual(s2.map((g) => g.shots.join("")), ["v", "p", "l", "d"]);
+  // the segment key follows the content of that stretch only
+  const k = film.segmentKey(tl2, s2[0]), moved = { ...tl2, events: [{ ...tl2.events[0], frame: 43 }] };
+  assert.notEqual(film.segmentKey(moved, s2[0]), k);                                  // emphasis moved inside s01
+  assert.equal(film.segmentKey(moved, s2[1]), film.segmentKey(tl2, s2[1]));          // s02 untouched
+  // final takes only an approved clip made for this key; preview falls back to the matching guide; stale is never used
+  const m = (key, approved) => ({ key, approved });
+  assert.equal(film.chooseClip(s2[0], k, { ai: m(k, false), guide: m(k) }, true), null);
+  assert.equal(film.chooseClip(s2[0], k, { ai: m(k, true), guide: null }, true).kind, "ai");
+  assert.equal(film.chooseClip(s2[0], k, { ai: m("old", true), guide: m(k) }, false).kind, "guide");
+  assert.equal(film.chooseClip(s2[0], k, { ai: m("old", true), guide: m("old") }, false), null);
+  const pics = film.picturesFor(s2, (g) => (g.id === "s01" ? { src: "ai/s01.mp4", kind: "ai", approved: true } : null));
+  assert.deepEqual(pics.map((p) => p && p.kind), ["ai", null, null, null]);
+  // the Seedance prompt comes from structured params, never the editor's note, and never asks for sepia or text
+  const pr = film.aiPrompt(s2[0], Object.fromEntries(tl2.shots.map((x) => [x.id, x])));
+  assert.match(pr, /Vienna street/); assert.doesNotMatch(pr, /note v/); assert.match(pr, /no sepia/); assert.match(pr, /first 2\.0 s/);
 });

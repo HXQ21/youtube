@@ -123,6 +123,9 @@ def main():
         log(f"chưa có blender/sets/{scene_id}.py: dựng bố cục không có nhân vật")
     shots = [s for s in tl["shots"] if s["id"] in seg["shots"]]
     fps, a, b = tl["fps"], seg["a"], seg["b"]
+    # a segment shorter than the clip Seedance makes (4 s minimum) is rendered to the full clip length: the last shot
+    # holds (camera at its end, cyclic actions keep going), so the AI clip's first seconds keep the guide's timing
+    b = max(b, a + round(float(seg.get("genSec", 0)) * fps))
     if o.get("frames"):
         fa, fb = (int(x) for x in o["frames"].split("-"))
         a, b = max(a, fa), min(b, fb + 1)
@@ -140,9 +143,9 @@ def main():
         for cid, who, v in getattr(mod, "CAST", []):
             people[cid] = Cast(cid, who, v, coll)
     for f in range(a, b):
-        s = next(x for x in shots if x["a"] <= f < x["b"])
+        s = next((x for x in shots if x["a"] <= f < x["b"]), shots[-1])     # past the story: hold the last shot
         lf, dur = f - s["a"], (s["b"] - s["a"]) / fps
-        u = lf / max(1, s["b"] - s["a"] - 1)
+        u = min(1.0, lf / max(1, s["b"] - s["a"] - 1))
         span = (s.get("params") or {}).get("span")
         p = span[0] + (span[1] - span[0]) * u if span else u
         fr = f - seg["a"] + 1

@@ -126,6 +126,7 @@ const Shot = z.object({
   label: z.object({ text: z.string().min(1), claim: id }).strict().optional(),
   events: z.array(z.object({ type: z.enum(["sfx", "action"]), name: z.string().min(1), at: At, gainDb: z.number().optional(), durSec: z.number().positive().optional() }).strict()).default([]),
   note: z.string().optional(),
+  ai: z.string().optional(), // extra plain-English line for the Seedance prompt (subject/action only; no captions, signs or colour grade)
 }).strict().refine((s) => !!s.from !== !!s.at, "mỗi shot cần đúng một trong hai: from (id đoạn lời) hoặc at (mốc trong đoạn)");
 export const StoryboardSchema = z.object({
   chapters: z.array(z.object({ id, title: z.string().min(1), adBreakBefore: z.boolean().default(false), targetSec: z.number().positive().optional() }).strict()).min(1),

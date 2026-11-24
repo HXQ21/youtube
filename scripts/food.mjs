@@ -351,6 +351,13 @@ const commands = {
     const [slug, format] = slugFmt(), ep = loadEpisode(slug, format, cliRender()), q = args.quality ?? "preview", dir = outDir(slug, format);
     const video = path.join(dir, `${name(ep, q)}.silent.mp4`), mix = path.join(ep.p.audioDir, "mix.wav"), out = path.join(dir, `${name(ep, q)}.mp4`);
     for (const f of [video, mix]) if (!fs.existsSync(f)) throw new ConfigError(`Thiếu ${rel(f)} (chạy render / mix trước).`);
+    // the silent video says what made it (film.mjs assemble = Blender/Seedance, render = three.js) and for which timeline
+    const made = fs.existsSync(video.replace(/\.mp4$/, ".json")) ? readJson(video.replace(/\.mp4$/, ".json")) : null, tlNow = readJson(tlFile(ep));
+    if (!made) console.log(`CHÚ Ý: ${rel(video)} không ghi nguồn (bản dựng trước 2026-11-24); không kiểm được nó khớp timeline hiện tại.`);
+    else {
+      if (made.fingerprint !== tlNow.fingerprint) throw new ConfigError(`${rel(video)} được dựng cho timeline cũ (${made.fingerprint} ≠ ${tlNow.fingerprint}): dựng lại hình (${made.source === "film" ? "film.mjs assemble" : "render"}) trước khi ghép tiếng.`);
+      console.log(`Hình: ${made.source === "film" ? `film.mjs assemble (${(made.segments ?? []).filter((s) => s.kind === "ai").length} đoạn Seedance, ${(made.segments ?? []).filter((s) => s.kind === "guide").length} đoạn bản mốc)` : "three.js render"}.`);
+    }
     const dv = probeDuration(video), da = probeDuration(mix);
     if (Math.abs(dv - da) > 0.25) throw new ConfigError(`Hình ${dv.toFixed(2)}s và tiếng ${da.toFixed(2)}s lệch nhau > 0.25s: mix hoặc render đang cũ so với timeline. Chạy lại bước cũ hơn.`);
     execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", video, "-i", mix, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "256k", "-ar", "48000", "-movflags", "+faststart", out]);
@@ -447,6 +454,7 @@ async function render(kind) {
   const listFile = path.join(cdir, "list.txt"); fs.writeFileSync(listFile, parts.map((f) => `file '${f.replace(/\\/g, "/").replace(/'/g, "'\\''")}'`).join("\n"));
   const silent = path.join(dir, `${name(ep, q)}.silent.mp4`);
   execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", "-movflags", "+faststart", silent]);
+  writeJson(silent.replace(/\.mp4$/, ".json"), { source: "three", quality: q, fingerprint: tl.fingerprint, at: new Date().toISOString() });
   const d = probeDuration(silent);
   console.log(`${rel(silent)}: ${d.toFixed(2)}s (timeline ${tl.durationSec}s)${Math.abs(d - tl.durationSec) > 0.2 ? "  <-- LỆCH, kiểm tra các đoạn" : ""}. Tiếp: mix rồi mux.`);
   setStatus(slug, format, { step: "rendered", stepVi: "Render xong hình (chưa có tiếng)", pct: 100 }, `Render xong: ${d.toFixed(2)}s`);

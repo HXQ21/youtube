@@ -4,8 +4,12 @@
 //                                   Blender layout render of each segment from blender/sets/<scene>.blend -> out/<slug>/<format>/guide/sNN.mp4
 //   node scripts/film.mjs ai       --episode <slug> [--segment s01]         quote every segment on Dreamina (no credits spent)
 //   node scripts/film.mjs ai       --episode <slug> --segment s01 --run --credit-ceiling N    generate after the user approved N credits
-//   node scripts/film.mjs assemble --episode <slug> [--quality preview|final]  Seedance clips (or guides) + 2D layer -> silent mp4 (then food.mjs mux)
+//   node scripts/film.mjs approve  --episode <slug> --segment s01[,s02]      mark Seedance clips the user watched and accepted
+//   node scripts/film.mjs assemble --episode <slug> [--quality preview|final]  clips + 2D layer -> silent mp4 (then food.mjs mix, mux, qa)
 // Credits: only `ai --run` spends them, never above --credit-ceiling, and only after a quote the user approved.
+// Every guide/sNN.mp4 and ai/sNN.mp4 has a sidecar .json with the segment key (shots, camera, params and timed events of
+// that stretch). A clip whose key differs from the current timeline is stale and never used. Final takes only
+// approved Seedance clips; preview falls back to the matching guide.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,7 +17,7 @@ import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { ROOT, PRESETS, ConfigError, loadEpisode, outDir, readJson, writeJson } from "./lib/config.mjs";
 import { resolveSlug } from "./lib/pipeline.mjs";
-import { planSegments, picturesFor, aiPrompt } from "./lib/film.mjs";
+import { planSegments, picturesFor, aiPrompt, segmentKey, chooseClip } from "./lib/film.mjs";
 import { dm } from "./lib/dreamina.mjs";
 import { findBlender } from "./lib/blender-exe.mjs";
 
@@ -37,6 +41,7 @@ const loadSegments = (c) => {
   if (!fs.existsSync(c.segFile)) { const s = planSegments(c.tl); writeJson(c.segFile, { timeline: rel(c.tf), segments: s }); return s; }
   return readJson(c.segFile).segments;
 };
+const sidecar = (c, kind, id) => { const f = path.join(c.dir, kind, `${id}.json`); return fs.existsSync(f) && fs.existsSync(f.replace(/\.json$/, ".mp4")) ? readJson(f) : null; };
 const pick = (segs) => (args.segment ? segs.filter((g) => String(args.segment).split(",").includes(g.id)) : segs);
 
 // ------------------------------------------------------------------ segments
@@ -69,6 +74,7 @@ const guide = () => {
     if (!args.frames) {
       const ff = spawnSync("ffmpeg", ["-y", "-hide_banner", "-loglevel", "error", "-framerate", String(c.tl.fps), "-i", path.join(fdir, "f%04d.png"), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", out]);
       if (ff.status !== 0) throw new Error(`ffmpeg lỗi khi ghép ${g.id}`);
+      writeJson(path.join(c.dir, "guide", `${g.id}.json`), { key: segmentKey(c.tl, g), quality: q, a: g.a, b: g.b, genSec: g.genSec, shots: g.shots, at: new Date().toISOString() });
     }
     console.log(`${g.id}: ${args.frames ? `khung ${args.frames}` : rel(out)} (${((Date.now() - t0) / 1000).toFixed(0)}s)`);
   }
@@ -86,13 +92,16 @@ const ai = () => {
   for (const g of segs) {
     const gv = path.join(c.dir, "guide", `${g.id}.mp4`);
     if (!fs.existsSync(gv)) throw new ConfigError(`Chưa có bản mốc ${rel(gv)}: chạy film.mjs guide --segment ${g.id}`);
+    const key = segmentKey(c.tl, g), gm = sidecar(c, "guide", g.id), done = sidecar(c, "ai", g.id);
+    if (gm?.key !== key) throw new ConfigError(`Bản mốc ${g.id} làm cho bản cắt cũ (timeline đã đổi trong đoạn này): chạy lại film.mjs guide --segment ${g.id}`);
+    if (done?.key === key && done.approved && !args.force) { console.log(`${g.id}: đã có clip được duyệt cho đúng đoạn này, bỏ qua`); continue; }
     const ratio = c.tl.width > c.tl.height ? "16:9" : c.tl.width === c.tl.height ? "1:1" : "9:16";
     const gen = ["--project-id", st.projectId, "--model", model, "--mode", "m2v", "--ratio", ratio, "--resolution", "720p", "--duration", String(g.genSec),
-      "--ref", `res:${up(gv)}`, ...refsExtra.flatMap((f) => ["--ref", `res:${up(f)}`]), "--prompt", aiPrompt(g, byId)];
+      "--ref", `res:${up(gv)}`, ...refsExtra.flatMap((f) => ["--ref", `res:${up(f)}`]), "--prompt", aiPrompt(g, byId, c.tl.fps)];
     st.nodes ??= {};
-    const key = `${g.id}|${model}`;
-    const node = st.nodes[key] ? dm(["node", "edit", "video", "--node-id", st.nodes[key], ...gen]).node.nodeId : dm(["node", "create", "video", "--title", `${c.slug} ${g.id}`, "--x", "0", "--y", "0", ...gen]).node.nodeId;
-    st.nodes[key] = node; writeJson(stFile, st);
+    const nodeKey = `${g.id}|${model}`;
+    const node = st.nodes[nodeKey] ? dm(["node", "edit", "video", "--node-id", st.nodes[nodeKey], ...gen]).node.nodeId : dm(["node", "create", "video", "--title", `${c.slug} ${g.id}`, "--x", "0", "--y", "0", ...gen]).node.nodeId;
+    st.nodes[nodeKey] = node; writeJson(stFile, st);
     const q = dm(["node", "quote", "--project-id", st.projectId, "--node-id", node]);
     total += q.totalMaxCredits;
     console.log(`${g.id} (${g.genSec}s, ${g.scene}): ${q.totalMaxCredits} credit`);
@@ -114,17 +123,40 @@ const ai = () => {
     const out = path.join(c.dir, "ai", `${g.id}.mp4`), part = `${out}.part`;
     fs.mkdirSync(path.dirname(out), { recursive: true }); fs.rmSync(part, { force: true });
     dm(["resource", "download", r.resourceId, "--project-id", st.projectId, "-o", part]); fs.renameSync(part, out);
-    console.log(`  -> ${rel(out)}`);
+    writeJson(out.replace(/\.mp4$/, ".json"), { key, guide: gm, prompt: aiPrompt(g, byId, c.tl.fps), model, nodeId: node, credits: q.totalMaxCredits, approved: false, at: new Date().toISOString() });
+    console.log(`  -> ${rel(out)} (chưa duyệt: xem rồi chạy film.mjs approve --segment ${g.id})`);
   }
   console.log(`Tổng báo giá ${segs.length} đoạn: ${total} credit.${args.run ? "" : ` Chưa tạo. Khi đã duyệt: node scripts/film.mjs ai --episode ${c.slug}${args.segment ? ` --segment ${args.segment}` : ""} --run --credit-ceiling ${total}`}`);
 };
 
+// ------------------------------------------------------------------ approve: the user watched these clips and accepts them
+const approve = () => {
+  const c = ctx(), segs = loadSegments(c);
+  if (!args.segment) throw new ConfigError("approve cần --segment s01[,s02] (các clip người dùng đã xem và đồng ý)");
+  for (const g of pick(segs)) {
+    const m = sidecar(c, "ai", g.id), key = segmentKey(c.tl, g);
+    if (!m) { console.log(`${g.id}: chưa có clip Seedance`); continue; }
+    if (m.key !== key) { console.log(`${g.id}: clip làm cho bản cắt cũ, không duyệt được (tạo lại sau khi báo giá)`); continue; }
+    writeJson(path.join(c.dir, "ai", `${g.id}.json`), { ...m, approved: true, approvedAt: new Date().toISOString() });
+    console.log(`${g.id}: đã duyệt`);
+  }
+};
+
 // ------------------------------------------------------------------ assemble: clips + 2D layer -> silent mp4
 const assemble = async () => {
-  const c = ctx(), segs = loadSegments(c), q = String(args.quality ?? "preview");
-  const have = (f) => fs.existsSync(path.join(c.dir, f));
-  const pics = picturesFor(segs, have), missing = segs.filter((_, i) => !pics[i]).map((g) => g.id);
-  if (missing.length && !args.allowGaps) throw new ConfigError(`Chưa có hình cho đoạn ${missing.join(", ")} (cần ai/ hoặc guide/). Thêm --allow-gaps để dựng bản nháp có chỗ trống.`);
+  const c = ctx(), segs = loadSegments(c), q = String(args.quality ?? "preview"), final = q === "final";
+  const fresh = planSegments(c.tl);
+  if (JSON.stringify(fresh.map((g) => [g.a, g.b, g.shots])) !== JSON.stringify(segs.map((g) => [g.a, g.b, g.shots]))) throw new ConfigError(`segments.json cũ hơn timeline: chạy film.mjs segments rồi guide lại các đoạn đổi`);
+  const stale = [];
+  const pics = picturesFor(segs, (g) => {
+    const key = segmentKey(c.tl, g), m = { ai: sidecar(c, "ai", g.id), guide: sidecar(c, "guide", g.id) };
+    if ((m.ai && m.ai.key !== key) || (m.guide && m.guide.key !== key)) stale.push(g.id);
+    return chooseClip(g, key, m, final);
+  });
+  if (stale.length) console.log(`Bỏ qua clip cũ (làm cho bản cắt trước): ${[...new Set(stale)].join(", ")}`);
+  const missing = segs.filter((_, i) => !pics[i]).map((g) => g.id);
+  if (missing.length && final) throw new ConfigError(`Bản final chỉ dùng clip Seedance đã duyệt cho đúng đoạn. Còn thiếu: ${missing.join(", ")} (ai --run rồi approve).`);
+  if (missing.length && !args["allow-gaps"]) throw new ConfigError(`Chưa có hình cho đoạn ${missing.join(", ")} (cần ai/ hoặc guide/ khớp timeline). Thêm --allow-gaps để dựng bản nháp có chỗ trống.`);
   const pub = path.join(ROOT, "public", "_film", c.slug, c.format);
   fs.rmSync(pub, { recursive: true, force: true }); fs.mkdirSync(pub, { recursive: true });
   const pictures = pics.filter(Boolean).map((p) => { const dst = path.join(pub, p.src.replace("/", "_")); fs.copyFileSync(path.join(c.dir, p.src), dst); return { ...p, src: `_film/${c.slug}/${c.format}/${path.basename(dst)}` }; });
@@ -137,13 +169,17 @@ const assemble = async () => {
   const out = path.join(c.dir, `${c.slug}-${c.format}-${c.tl.width}x${c.tl.height}-${q}.silent.mp4`);
   await renderMedia({ composition, serveUrl, codec: "h264", outputLocation: out, inputProps, crf: 18, muted: true, browserExecutable: chrome,
     concurrency: Math.min(6, Math.max(2, Math.floor(os.cpus().length / 3))) });
-  console.log(`${rel(out)}: ${pictures.filter((p) => p.kind === "ai").length} đoạn Seedance, ${pictures.filter((p) => p.kind === "guide").length} đoạn bản mốc. Tiếp: food.mjs mux.`);
+  // what this video is made of, read by food.mjs mux/qa: the source, the timeline it matches, the clip per segment
+  writeJson(out.replace(/\.mp4$/, ".json"), { source: "film", quality: q, fingerprint: c.tl.fingerprint, at: new Date().toISOString(),
+    segments: pics.map((p, i) => ({ id: segs[i].id, kind: p?.kind ?? null, approved: !!p?.approved, key: segmentKey(c.tl, segs[i]) })) });
+  console.log(`${rel(out)}: ${pictures.filter((p) => p.kind === "ai").length} đoạn Seedance, ${pictures.filter((p) => p.kind === "guide").length} đoạn bản mốc. Tiếp: food.mjs mix, mux, qa.`);
 };
 
 try {
   if (cmd === "segments") segments();
   else if (cmd === "guide") guide();
   else if (cmd === "ai") ai();
+  else if (cmd === "approve") approve();
   else if (cmd === "assemble") await assemble();
   else console.log(fs.readFileSync(new URL(import.meta.url), "utf8").split("\n").filter((l) => l.startsWith("//")).join("\n"));
 } catch (e) { console.error(e instanceof ConfigError ? e.message : e?.stack ?? e); process.exit(1); }

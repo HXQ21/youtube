@@ -52,7 +52,7 @@ export const buildTimeline = (ep, tr, missingAssets = []) => {
     if (b - a < Math.round(0.3 * fps)) throw new ConfigError(`shot ${sh.id}: chỉ dài ${b - a} frame (${((b - a) / fps).toFixed(2)} giây). Gộp shot hoặc dời mốc.`);
     const seg = sh.from ?? sh.at.segment;
     return { id: sh.id, scene: sh.scene, a, b, startSec: +(a / fps).toFixed(3), chapter: script.segments.find((s) => s.id === seg).chapter, camera: sh.camera, params: sh.params,
-      light: sh.light ?? null, legend: sh.legend, static: sh.static, transition: sh.transition, claims: sh.claims, assets: sh.assets, label: sh.label ?? null, pace: sh.pace ?? null, note: sh.note ?? null, seed: parseInt(sha(sh.id).slice(0, 6), 16) };
+      light: sh.light ?? null, legend: sh.legend, static: sh.static, transition: sh.transition, claims: sh.claims, assets: sh.assets, label: sh.label ?? null, pace: sh.pace ?? null, note: sh.note ?? null, ai: sh.ai ?? null, seed: parseInt(sha(sh.id).slice(0, 6), 16) };
   });
   const events = [];
   for (const sh of storyboard.shots) for (const ev of sh.events) {
@@ -84,7 +84,7 @@ export const buildTimeline = (ep, tr, missingAssets = []) => {
     music: config.music, sfxGainDb: config.sfxGainDb,
     chapters, adBreaks, segments, words: tr.words.map((w) => ({ t: w.text, s: w.startSec, e: w.endSec })), shots, events,
     legendClaims: [...legendClaims], placeholders: missingAssets,
-    fingerprint: sha({ script: script.segments.map((s) => [s.id, s.text]), storyboard, render, words: tr.words.length, dur: tr.audio.durationSec }).slice(0, 16),
+    fingerprint: sha({ script: script.segments.map((s) => [s.id, s.text]), storyboard, render, words: tr.words.map((w) => [w.text, Math.round(w.startSec * fps), Math.round(w.endSec * fps)]), dur: tr.audio.durationSec }).slice(0, 16),
   };
 };
 

@@ -1,5 +1,7 @@
 """Pace check for one episode (2026-11-24, targets agreed with the user in VISUAL_DENSITY.md):
-  - people:  share of shots with hands or faces            target 60-70 %  (food-history genre; RicksClips is ~80 %)
+  - people:  share of shots with hands or faces            reference 60-70 %, NOT a pass/fail check (2026-11-24 review):
+             a dough shot needs the hands on the dough, a cross-section needs the crumb; adding a face to reach a quota
+             makes the food smaller. Each shot must show its subject clearly instead.
   - food:    share of shots that show the dish              target ~70 %
   - still:   share of 0.5 s steps that are nearly frozen    target <= 3 %   (delta < 3 on a 0-255 scale, as in the study)
   - motion:  median delta between 0.5 s steps               target >= 16
@@ -63,7 +65,7 @@ def main():
     still = float((d < 3).mean()) if d is not None else None
     med = float(np.median(d)) if d is not None else None
     checks = [
-        ("Shot có người hoặc tay", f"{people * 100:.0f} %", "60–70 %", 0.6 <= people <= 0.75),
+        ("Shot có người hoặc tay", f"{people * 100:.0f} %", "60–70 % (tham khảo)", None),
         ("Shot có món ăn", f"{food * 100:.0f} %", "khoảng 70 %", 0.6 <= food),
         ("Bước 0,5 s đứng yên", "-" if still is None else f"{still * 100:.1f} %", "≤ 3 %", None if still is None else still <= 0.03),
         ("Chuyển động (trung vị Δ)", "-" if med is None else f"{med:.1f}", "≥ 16", None if med is None else med >= 16),

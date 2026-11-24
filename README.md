@@ -197,7 +197,10 @@ Blender chỉ dựng bố cục (vị trí, máy quay, nhân vật, động tác
 | Chia đoạn AI (≤ 15 giây, mỗi đoạn một địa điểm) | `node scripts/film.mjs segments --episode <slug> --format short` | `segments.json`, danh sách bối cảnh `.blend` còn thiếu |
 | Bản mốc Blender | `node scripts/film.mjs guide --episode <slug> --format short [--segment s01] [--quality draft]` | `guide/sNN.mp4` (`blender/shot.py` trên `blender/sets/<cảnh>.blend`) |
 | Seedance (chỉ báo giá) | `node scripts/film.mjs ai ...` rồi `--run --credit-ceiling N` khi đã duyệt | `ai/sNN.mp4` |
-| Ghép | `node scripts/film.mjs assemble ...` | `<slug>-<format>-WxH-<q>.silent.mp4` (`FoodAssembly`) |
+| Duyệt clip đã xem | `node scripts/film.mjs approve --episode <slug> --segment s01,s02` | `ai/sNN.json` ghi `approved` |
+| Ghép | `node scripts/film.mjs assemble ...` (`--quality final` chỉ nhận clip đã duyệt) | `<slug>-<format>-WxH-<q>.silent.mp4` + `.json` ghi nguồn và timeline; rồi `food.mjs mix`, `mux`, `qa` |
+
+Mỗi đoạn tách khi đổi bối cảnh, thành phố, thời kỳ hoặc giữa giai thoại và tư liệu. Mỗi `guide/sNN.mp4` và `ai/sNN.mp4` có file `.json` ghi khóa của đoạn (shot, máy quay, tham số, sự kiện có mốc thời gian trong đoạn); clip làm cho bản cắt cũ không bao giờ được dùng, và `mux` dừng khi hình được dựng cho timeline khác. Prompt Seedance dựng từ `params` (thêm câu tiếng Anh bằng trường `ai` của shot), không dùng `note`.
 
 Bối cảnh `blender/sets/<cảnh>.blend` theo quy ước `CAM-<tên>`, `MARK-<vai>`, `ACT-<tên>`; nhân vật và động tác ở `blender/sets/<cảnh>.py`. Nhân vật Grease Pencil được vẽ một lần mỗi tư thế thành ảnh PNG (`blender/kit.py`, lưu ở `out/_cache/cards`) và dựng trên tấm phẳng để bối cảnh che được nhân vật. Blender: `D:pplender.exe`, hoặc `--blender <đường dẫn>` / biến `BLENDER_EXE`.
 
