@@ -8,6 +8,8 @@
 # Characters and actions: blender/sets/<scene>.py (optional) with
 #   CAST = [("baker", "baker", 0), ...]                       id, who, variant
 #   def pose(ctx, shot, marks, acts, cam_pos) -> {id: {"at": (x, y, z), "o": {...pose options...}} | None}
+#   def frame(ctx, shot, fr)   optional, called every frame (also without characters): key set variants at render frame fr
+# A single storyboard camera name X moves from CAM-X to CAM-XEnd when the set has both.
 import json, math, os, sys, importlib.util
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "draw"))
@@ -36,8 +38,12 @@ def opts():
 EASE = {"linear": lambda u: u, "smooth": lambda u: u * u * (3 - 2 * u), "out": lambda u: 1 - (1 - u) ** 3}
 
 
-def cam_spec(c):
-    return (c, c, "smooth") if isinstance(c, str) else (c["from"], c["to"], c.get("ease", "smooth"))
+def cam_spec(c, cams):
+    """storyboard camera -> (from, to, ease). A single name X moves to CAM-XEnd when the set has one (e.g. orbit ->
+    orbitEnd), so a storyboard written for three.js (one moving camera per name) still moves in Blender"""
+    if isinstance(c, str):
+        return (c, c + "End" if c + "End" in cams else c, "smooth")
+    return (c["from"], c["to"], c.get("ease", "smooth"))
 
 
 ON_TWOS = 2
@@ -131,7 +137,7 @@ def main():
     sc.collection.children.link(coll)
     people = {}
     if mod:
-        for cid, who, v in mod.CAST:
+        for cid, who, v in getattr(mod, "CAST", []):
             people[cid] = Cast(cid, who, v, coll)
     for f in range(a, b):
         s = next(x for x in shots if x["a"] <= f < x["b"])
@@ -140,7 +146,7 @@ def main():
         span = (s.get("params") or {}).get("span")
         p = span[0] + (span[1] - span[0]) * u if span else u
         fr = f - seg["a"] + 1
-        c_from, c_to, ease = cam_spec(s["camera"])
+        c_from, c_to, ease = cam_spec(s["camera"], cams)
         A, B = cams.get(c_from), cams.get(c_to)
         if A is None or B is None:
             raise SystemExit(f"shot {s['id']}: camera {c_from}/{c_to} is not in {scene_id}.blend (have: {', '.join(sorted(cams))})")
@@ -157,13 +163,17 @@ def main():
             rc.keyframe_insert(key, frame=fr)
         for key in ("lens", "dof.focus_distance", "dof.aperture_fstop"):
             rc.data.keyframe_insert(key, frame=fr)
-        if not people:
+        if not mod:
             continue
         acts_t = [{"name": e["name"], "t": e["sec"] - s["startSec"]} for e in tl["events"] if e["type"] == "action" and e["shot"] == s["id"]]
-        ctx = {"f": f, "lf": lf, "t": lf / fps, "u": u, "p": p, "dur": dur, "fps": fps, "params": s.get("params") or {}, "actions": acts_t,
+        ctx = {"f": f, "fr": fr, "lf": lf, "t": lf / fps, "u": u, "p": p, "dur": dur, "fps": fps, "params": s.get("params") or {}, "actions": acts_t,
                "chars": bool(A.get("chars", True))}
+        if hasattr(mod, "frame"):        # every frame, with or without characters: the set keys its own variants (items, backdrops, place)
+            mod.frame(ctx, s, fr)
+        if not people:
+            continue
         cam_pos = tuple(rc.location)
-        poses = mod.pose(ctx, s, marks, acts, cam_pos) if ctx["chars"] else {}
+        poses = mod.pose(ctx, s, marks, acts, cam_pos) if ctx["chars"] and hasattr(mod, "pose") else {}
         for cid, c in people.items():
             c.show(fr, f, poses.get(cid), cam_pos)
     for c in people.values():
