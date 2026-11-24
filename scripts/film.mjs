@@ -111,7 +111,8 @@ const ai = () => {
     if (!fs.existsSync(gv)) throw new ConfigError(`Chưa có bản mốc ${rel(gv)}: chạy film.mjs guide --segment ${g.id}`);
     const key = segmentKey(c.tl, g), gm = sidecar(c, "guide", g.id), done = sidecar(c, "ai", g.id);
     if (gm?.key !== key) throw new ConfigError(`Bản mốc ${g.id} làm cho bản cắt cũ (timeline đã đổi trong đoạn này): chạy lại film.mjs guide --segment ${g.id}`);
-    if (gm.set !== setVersion(g.scene) && !args.force) throw new ConfigError(`Bối cảnh ${g.scene} đã đổi sau khi dựng bản mốc ${g.id}: chạy lại film.mjs guide --segment ${g.id} trước khi tốn credit`);
+    if (!gm.set) console.log(`  chú ý: bản mốc ${g.id} dựng trước khi có phiên bản bối cảnh; không kiểm được bối cảnh có đổi sau đó không`);
+    else if (gm.set !== setVersion(g.scene) && !args.force) throw new ConfigError(`Bối cảnh ${g.scene} đã đổi sau khi dựng bản mốc ${g.id}: chạy lại film.mjs guide --segment ${g.id} trước khi tốn credit`);
     if (gm.quality === "draft" && args.run && !args["allow-draft-guide"]) console.log(`  chú ý: bản mốc ${g.id} là bản nháp (nửa kích thước); nên dựng --quality preview trước khi tạo`);
     if (done?.key === key && done.approved && !args.force) { console.log(`${g.id}: đã có clip được duyệt cho đúng đoạn này, bỏ qua`); continue; }
     const cr = castRefs(gm.cast);
