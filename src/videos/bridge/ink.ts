@@ -1,4 +1,4 @@
-// Ink outlines for the 3D world, matched to the reference measurements (references/_archive_reference-channel-study/reports/outlines.md recipe,
+// Ink outlines for the 3D world, matched to the reference measurements (an earlier reference-channel outline study, since removed;
 // post-agent changes: widths scale with the output height (pxScale = height / 1920, so 5.1 px at 1080x1920 is
 // 6.8 px at 1440x2560), RMAX 9 for headroom at 1440, fog-tinted ink (scene.fog, x0.3), `noInkFallback` below.
 // Round 2: widths x1.5 (5.1 -> 3.3 px from 6 to 90 m), pure near-black #030303, far opacity 0.95, depth jumps from 1 %.

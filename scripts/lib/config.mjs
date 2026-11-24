@@ -11,7 +11,7 @@ export const EPISODES = process.env.FOOD_EPISODES_DIR ? path.resolve(process.env
 
 // ---------------------------------------------------------------- presets
 export const PRESETS = {
-  short: { format: "short", targetDurationSec: 75, minDurationSec: 60, maxDurationSec: 90, aspectRatio: "9:16", width: 1080, height: 1920, fps: 30, captions: false, labels: false },
+  short: { format: "short", targetDurationSec: 75, minDurationSec: 60, maxDurationSec: 90, aspectRatio: "9:16", width: 1080, height: 1920, fps: 30, captions: true, labels: false },   // captions on for Shorts (1-3 word chunks), decided 2026-11-24
   long: { format: "long", targetDurationSec: 600, minDurationSec: 480, maxDurationSec: 720, aspectRatio: "16:9", width: 1920, height: 1080, fps: 30, captions: false, labels: false },
 };
 /** render scale per quality; final = composition size, hq = 1440x2560 / 2560x1440 for the default presets */
@@ -121,7 +121,7 @@ const Shot = z.object({
   id, scene: id, from: id.optional(), at: At.optional(),
   camera: z.union([z.string(), z.object({ from: z.string(), to: z.string(), ease: z.enum(["linear", "smooth", "out"]).optional() }).strict()]).default("main"),
   params: z.record(z.string(), z.any()).default({}), light: z.string().optional(), legend: z.boolean().default(false), static: z.boolean().default(false),
-  transition: z.enum(["cut", "dip", "whip"]).default("cut"), claims: z.array(id).default([]), assets: z.array(id).default([]),
+  transition: z.enum(["cut", "dip", "whip", "dissolve"]).default("cut"), claims: z.array(id).default([]), assets: z.array(id).default([]),
   pace: z.enum(["hook", "story", "process", "insert"]).optional(), // shot length class, see PACE in timeline.mjs
   label: z.object({ text: z.string().min(1), claim: id }).strict().optional(),
   events: z.array(z.object({ type: z.enum(["sfx", "action"]), name: z.string().min(1), at: At, gainDb: z.number().optional(), durSec: z.number().positive().optional() }).strict()).default([]),

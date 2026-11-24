@@ -64,13 +64,24 @@ def base_color(o):
     return tuple(m.diffuse_color)
 
 
-def emitters(objs, names, strength=6.0):
-    """unlit three.js materials (windows, lamp glass, fire) become real light sources"""
+def emitters(objs, names, strength=6.0, normalize=False):
+    """unlit three.js materials (windows, lamp glass, fire) become real light sources. Their imported colour is
+    already above white (the renderer pre-brightens glow colours); normalize=True keeps only the hue, so a render
+    shows a warm window instead of a clipped white one"""
     for n in names:
         o = objs.get(n)
         if not o:
             continue
         col = base_color(o)
+        if normalize:
+            mx = max(col[:3]) or 1.0
+            col = (col[0] / mx, col[1] / mx, col[2] / mx, 1.0)
+        # a painted glow (the oven fire is a dark-to-orange gradient image): keep the picture, not just the flat colour,
+        # otherwise the fire renders as a white panel
+        img = None
+        src = o.active_material
+        if src and src.use_nodes:
+            img = next((x.image for x in src.node_tree.nodes if x.type == "TEX_IMAGE" and x.image), None)
         m = bpy.data.materials.new(f"emit_{n}")
         m.use_nodes = True
         nt = m.node_tree
@@ -78,18 +89,29 @@ def emitters(objs, names, strength=6.0):
         e = nt.nodes.new("ShaderNodeEmission")
         e.inputs["Color"].default_value = col
         e.inputs["Strength"].default_value = strength
+        if img is not None:
+            t = nt.nodes.new("ShaderNodeTexImage")
+            t.image = img
+            nt.links.new(t.outputs["Color"], e.inputs["Color"])
+            e.inputs["Strength"].default_value = strength * (1.6 if normalize else 1.0)
         out = nt.nodes.new("ShaderNodeOutputMaterial")
         nt.links.new(e.outputs[0], out.inputs[0])
         o.data.materials.clear()
         o.data.materials.append(m)
 
 
-def lights(sc, sun_k=1.5, world_k=0.55):
+def lights(sc, sun_k=1.5, world_k=0.55, opt=None):
     """sun frozen for the shot (same direction as the three.js rig) + the hemisphere colour as the world"""
     L = sc["light"]
     sun = bpy.data.lights.new("sun", "SUN")
     sun.energy = L["sunI"] * sun_k
-    sun.color = hexcol(L["sunCol"])[:3]
+    # warm / cool as the three.js two-tone palette: the sun takes the hue of the preset's lit colour, the world (sky
+    # fill) the hue of its shade colour, so the light temperature matches the episode renderer
+    lit, shade = L.get("lit"), L.get("shade")
+    # the sun keeps the lit hue, but softened (--sunsat): in Blender the warm walls bounce it again, so the full hue
+    # turned the whole frame orange (FEEDBACK_LOG #15)
+    k = float(opt.get("sunsat", 0.6)) if opt else 0.6
+    sun.color = tuple(1 - k + k * c / max(lit) for c in lit) if lit else hexcol(L["sunCol"])[:3]
     sun.angle = math.radians(3.0)
     so = bpy.data.objects.new("sun", sun)
     bpy.context.scene.collection.objects.link(so)
@@ -99,7 +121,17 @@ def lights(sc, sun_k=1.5, world_k=0.55):
     bpy.context.scene.world = w
     w.use_nodes = True
     bg = w.node_tree.nodes["Background"]
-    bg.inputs["Color"].default_value = hexcol(L["sky"])
+    # three.js tints the shaded side by shade/lit, which is COOL against the warm lit side (interior: lit 1.66/1.42/1.1,
+    # shade .34/.30/.31 -> ratio .20/.21/.28, bluish). The fill light takes that ratio, so shadows cool down like in the
+    # episode renderer and the colours keep apart (the shade hue alone was a neutral pink: everything went one orange)
+    wc = float((opt or {}).get("worldcool", 0.6))      # 0 = shade hue (old), 1 = full shade/lit ratio (walls went grey)
+    if shade and lit and wc > 0:
+        q = [s / l for s, l in zip(shade, lit)]
+        q = [x / max(q) for x in q]
+        h = [x / max(shade) for x in shade]
+        bg.inputs["Color"].default_value = tuple((1 - wc) * a + wc * b for a, b in zip(h, q)) + (1.0,)
+    else:
+        bg.inputs["Color"].default_value = (tuple(c / max(shade) for c in shade) + (1.0,)) if shade else hexcol(L["sky"])
     bg.inputs["Strength"].default_value = L["hemiI"] * world_k
     return so
 

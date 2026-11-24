@@ -8,13 +8,25 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy, math
 from mathutils import Vector
 from common import args, log, reset, import_set, emitters, lights, v3, mat4
+from upgrade import upgrade
+from inherit import inherit, card_shading
 
 d, sc, opt = args()
 N = len(sc["frames"])
 reset()
 objs = import_set(d)
-emitters(objs, sc["emit"])
-lights(sc)
+emitters(objs, sc["emit"], strength=float(opt.get("glow", 1.0)), normalize=True)
+lights(sc, world_k=float(opt.get("sky", 1.3)), opt=opt)
+# the set in its own collection, so the ink lines (Freestyle) draw the set only: the cards already carry their ink
+set_coll = bpy.data.collections.new("Set")
+bpy.context.scene.collection.children.link(set_coll)
+for o in objs.values():
+    for c in list(o.users_collection):
+        c.objects.unlink(o)
+    set_coll.objects.link(o)
+# Blender upgrade layer: rounded edges, relief from the painted textures, real lights at glowing sources, atmosphere
+if str(opt.get("upgrade", "1")) != "0":
+    upgrade(objs, sc, opt)
 scene = bpy.context.scene
 scene.frame_start, scene.frame_end = 1, N
 scene.render.fps = sc["fps"]
@@ -76,10 +88,15 @@ for c in sc["cards"]:
     tex.image_user.use_auto_refresh = True
     bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
     bsdf.inputs["Roughness"].default_value = 0.9
-    nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    # cards take the preset's character tint, like the three.js card shader (cardshade.ts uCharTint)
+    tint = nt.nodes.new("ShaderNodeMix"); tint.name = "chartint"
+    tint.data_type = "RGBA"; tint.blend_type = "MULTIPLY"; tint.inputs[0].default_value = 1.0
+    ct = sc["light"].get("charTint", [1, 1, 1])
+    nt.links.new(tex.outputs["Color"], tint.inputs[6]); tint.inputs[7].default_value = (ct[0], ct[1], ct[2], 1.0)
+    nt.links.new(tint.outputs[2], bsdf.inputs["Base Color"])
     if "Emission Color" in bsdf.inputs:
-        nt.links.new(tex.outputs["Color"], bsdf.inputs["Emission Color"])
-        bsdf.inputs["Emission Strength"].default_value = 0.35
+        nt.links.new(tint.outputs[2], bsdf.inputs["Emission Color"])
+        bsdf.inputs["Emission Strength"].default_value = float(opt.get("cardglow", 0.75))
     clip = nt.nodes.new("ShaderNodeMath")
     clip.operation = "GREATER_THAN"
     clip.inputs[1].default_value = 0.5
@@ -131,6 +148,22 @@ for i, fr in enumerate(sc["frames"]):
     cd.dof.keyframe_insert("focus_distance", frame=f)
     cd.dof.keyframe_insert("aperture_fstop", frame=f)
 
+# --- inherited from the episode renderer: sky gradient, clouds, steam sprites, floor decals, card shading
+scene.frame_set(1)
+inherit(sc, d, cam)
+for c in sc["cards"]:
+    o = bpy.data.objects.get(c["id"])
+    if not o or not o.active_material:
+        continue
+    nt = o.active_material.node_tree
+    tn = nt.nodes.get("chartint")
+    bsdf = next((x for x in nt.nodes if x.type == "BSDF_PRINCIPLED"), None)
+    if tn and bsdf:
+        shaded = card_shading(nt, None, tn.outputs[2], sc, cam)
+        nt.links.new(shaded, bsdf.inputs["Base Color"])
+        if "Emission Color" in bsdf.inputs:
+            nt.links.new(shaded, bsdf.inputs["Emission Color"])
+
 # --- engine
 for eng in ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE"):
     try:
@@ -140,21 +173,62 @@ for eng in ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE"):
         continue
 ee = scene.eevee
 ee.taa_render_samples = int(opt.get("samples", 64))
-for k, v in (("use_raytracing", True), ("use_shadows", True), ("use_gtao", True), ("use_bloom", True), ("use_soft_shadows", True)):
+for k, v in (("use_raytracing", str(opt.get("rt", "1")) != "0"), ("use_shadows", True), ("use_gtao", True), ("use_bloom", True), ("use_soft_shadows", True)):
     if hasattr(ee, k):
         setattr(ee, k, v)
 if hasattr(ee, "ray_tracing_options"):
     ee.ray_tracing_options.resolution_scale = "1"
+# the episode look: the same tone map as the three.js renderer (Khronos PBR Neutral; Standard on older Blender),
+# then scripts/grade_frames.py applies the shot's FOOD_GRADES preset to every frame (blender.mjs render)
+for vt in ("Khronos PBR Neutral", "Standard"):
+    try:
+        scene.view_settings.view_transform = vt
+        break
+    except Exception:
+        continue
 try:
-    scene.view_settings.view_transform = "AgX"
-    scene.view_settings.look = "AgX - Medium High Contrast"
+    scene.view_settings.look = "None"
+    scene.view_settings.exposure = float(opt.get("exposure", -0.75))
 except Exception:
     pass
+log("tô màu:", scene.view_settings.view_transform)
+try:
+    scene.render.use_freestyle = True
+    scene.render.line_thickness_mode = "ABSOLUTE"
+    # same weight as the three.js ink pass (src/videos/bridge/ink.ts: ~5 px near, thinner far, near-black, creases at
+    # ~50 deg): the old 1.6 px lines in a dark brown were a third of that, so the Blender frame looked washed (FEEDBACK_LOG #15)
+    scene.render.line_thickness = float(opt.get("ink", 4.2)) * sc["height"] / 1920
+    fs = bpy.context.view_layer.freestyle_settings
+    ls = fs.linesets[0] if fs.linesets else fs.linesets.new("ink")
+    ls.select_by_collection = True
+    ls.collection = set_coll
+    ls.select_silhouette = ls.select_border = ls.select_crease = True
+    fs.crease_angle = math.radians(130)
+    bpy.context.view_layer.use_freestyle = True
+    if ls.linestyle is None:
+        ls.linestyle = bpy.data.linestyles.new("ink")
+    ls.linestyle.color = (0.012, 0.012, 0.012)
+    ls.linestyle.thickness = 1.0
+    if not ls.linestyle.thickness_modifiers:        # thinner with distance, like the three.js pass (3.7 px at 3 m -> 1.5 px at 90 m)
+        tm = ls.linestyle.thickness_modifiers.new("far", "DISTANCE_FROM_CAMERA")
+        tm.range_min, tm.range_max, tm.value_min, tm.value_max = 3.0, 40.0, 1.0, 0.45
+        tm.mapping = "LINEAR"
+    if not ls.linestyle.alpha_modifiers:            # no sharp lines on a foreground prop the lens blur has softened
+        am = ls.linestyle.alpha_modifiers.new("near", "DISTANCE_FROM_CAMERA")
+        am.range_min, am.range_max = 1.6, 2.6
+        am.mapping = "LINEAR"
+        am.blend = "MULTIPLY"
+        if hasattr(am, "value_min"):
+            am.value_min, am.value_max = 0.0, 1.0
+    log("viền mực Freestyle: bật")
+except Exception as e:
+    log("không bật được Freestyle:", e)
 fdir = os.path.join(d, "frames")
 shutil.rmtree(fdir, ignore_errors=True)
 os.makedirs(fdir)
 scene.render.image_settings.file_format = "PNG"
 scene.render.filepath = os.path.join(fdir, "f####")
+scene.frame_step = int(opt.get("step", 1))   # --step K: every K-th frame only (quick look; blender.mjs render needs 1)
 log(f"render {scene.render.engine} {sc['width']}x{sc['height']} {N} frame")
 bpy.ops.render.render(animation=True)
 log("render xong")

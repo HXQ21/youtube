@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import { facadeHD, cobbleHD, roofHD, rep, ctex } from "../videos/bridge/paint";
 import { NOINK } from "../videos/bridge/ink";
-import { noChars, mat, glow, mesh, box, cyl, woodTex, Card, frame, drift, hash, lerp, charCam } from "../core/stage";
+import { noChars, mat, glow, mesh, box, cyl, woodTex, Card, frame, drift, hash, lerp, charCam, lowCam, highCam, pathCam, dirOf } from "../core/stage";
 import { loaf, pastry } from "./food";
 import { Person, cast, canWalkSide } from "./people";
 import type { CamState, Ctx, SceneDef, V3 } from "../core/types";
@@ -96,9 +96,15 @@ export const streetScene: SceneDef = {
         sign: cam([0, 3.7, -3.9], [0.1, -0.06, 1], 5, 2.2, 28, 8),
         high: cam([0, 2, -2.5], [0.25, 0.8, 1], 15, 10, 36, 2),
         skyline: cam([0, 7.5, -6.5], [0.3, -0.22, 1], 13, 8, 34, 2),
+        // story cameras (FEEDBACK_LOG #17): the officer seen from below at his door, a high reveal of the square and its
+        // crowd, and a fly-in that drops from above the roofs to the shop front (starts at 16 deg, under the card-safe 18)
+        lowOfficer: lowCam([2.2, 1.35, -2.9], 1.6, 2.0, { yaw: -12, portrait: [[2.2, 1.35, -2.9], 1.5, 2.1] }),
+        highSquare: highCam([0.5, 1.4, -2.0], 10, 5.5, { yaw: 10, fov: 44, portrait: [[0.5, 1.4, -2.0], 7, 7] }),
+        flyIn: pathCam([(c) => frame([0, 2.6, -3.9], 24, 16, dirOf(8, 16), c.aspect, 40, 1.1, 2), charCam([0, 2.2, -3.9], 7.6, 4.6, { yaw: 7, pitch: 3, fov: 34, cInf: 5 })], { ease: "out" }),
       },
       shots: { main: { kind: "wide", chars: true }, wideL: { kind: "wide", chars: true }, wideR: { kind: "wide", chars: true }, shop: { kind: "wide", chars: true }, low: { kind: "medium", chars: true },
-        door: { kind: "medium", chars: true }, face: { kind: "closeup", chars: true }, sign: { kind: "detail", chars: false }, high: { kind: "top", chars: false }, skyline: { kind: "top", chars: false } },
+        door: { kind: "medium", chars: true }, face: { kind: "closeup", chars: true }, sign: { kind: "detail", chars: false }, high: { kind: "top", chars: false }, skyline: { kind: "top", chars: false },
+        lowOfficer: { kind: "medium", chars: true, drama: true }, highSquare: { kind: "wide", chars: true, drama: true }, flyIn: { kind: "wide", chars: true, drama: true } },
       update(c: Ctx, cm: CamState) {
         const p = c.params as { place?: string; sign?: string; crowd?: number; queue?: number }, place = p.place === "vienna" ? "vienna" : "paris";
         for (const [k, g] of Object.entries(rows)) g.visible = k === place;

@@ -21,3 +21,6 @@ episodes/*/*/voice/*.wav
 episodes/*/*/*.props.json
 public/_blender
 data/claude-thread.json
+
+__pycache__/
+public/_film/

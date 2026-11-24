@@ -167,6 +167,26 @@ export const GRADE_GOLDEN2: GradeParams = {
   vig: [0.2, 0.4],
 };
 export const GRADES: Record<"day" | "golden", GradeParams> = { day: GRADE_DAY2, golden: GRADE_GOLDEN2 };
+
+/** Food-episode looks (2026-11-23). The user asked for 3D scene colours like the reference channel; fitted to the colour
+ *  statistics of all 726 reference frames, SPLIT into day and dark frames (research/ricksclips/measure/color.py,
+ *  color_split.json, sheets/G_palette.png): day frames (385) Y' mean .49, p10 .20, p90 .77, vignette .79;
+ *  dark frames (341) Y' mean .27, p10 .11, p90 .47, vignette .55. Both: HSV saturation ~.35 (muted, natural),
+ *  near-neutral charcoal / slate shadows (chroma <= .03; a hint of blue only at night), small warm amber highlights
+ *  (hue ~150, chroma ~.045). cine / cineWarm / cineTable aim at the day numbers, cineNight at the dark ones.
+ *  Palette: charcoal, slate grey, earth browns, muted blue, amber accents, ivory. `table` stays a little brighter so a
+ *  dish keeps its colour. The old soft look is kept as `soft` (GRADE_DAY2). */
+export const FOOD_GRADES: Record<string, GradeParams> = {
+  // daylight exteriors
+  cine: { ky: [0, 0.11, 0.3, 0.6, 0.845, 0.95, 1], sat: [1.0, 1.18, 1.08], tintS: [0.004, 0.002], tintM: [0, 0], tintH: [-0.006, 0.004], vig: [0.3, 0.36] },
+  // interiors, golden hour: warmer highlights, same neutral-cool darks
+  cineWarm: { ky: [0, 0.115, 0.315, 0.615, 0.835, 0.93, 1], sat: [1.0, 1.1, 1.05], tintS: [0.004, 0.002], tintM: [-0.003, 0.003], tintH: [-0.008, 0.006], vig: [0.16, 0.45] },
+  // food close-ups: gentler, so glaze and crumb keep their colour
+  cineTable: { ky: [0, 0.11, 0.3, 0.6, 0.845, 0.95, 1], sat: [1.0, 1.08, 1.04], tintS: [0.004, 0.002], tintM: [0, 0], tintH: [-0.006, 0.004], vig: [0.22, 0.4] },
+  // night: deeper navy-charcoal, lamp highlights
+  cineNight: { ky: [0, 0.06, 0.18, 0.43, 0.73, 0.9, 1], sat: [0.95, 1.05, 1.05], tintS: [0.02, -0.004], tintM: [0.006, 0], tintH: [-0.012, 0.008], vig: [0.46, 0.28] },
+  soft: GRADE_DAY2,
+};
 /** One strength (0..1, the effect's `amount`) per preset, set against the NEW world (bridge_world, 2026-10-31): full-strength
  *  presets overshot (day median Y' .59-.67 vs target .571, golden .58 vs .52); day 0.65 / golden 0.45 land at
  *  .54-.62 / ~.52. Re-fit the presets (grade.md 5.C) after the merge and raise these again. */

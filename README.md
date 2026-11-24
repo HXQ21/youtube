@@ -198,7 +198,7 @@ So 3 cách làm đẹp hình trên cùng một cảnh 5 giây (`scripts/blender.
 | Xuất cho Blender | `... export` | `set.glb` (bối cảnh), `scene.json` (camera, vật chuyển động, nhân vật từng frame), `cards/*.png` |
 | Bản three.js làm mốc | `... three` | `threejs.mp4` |
 | Cách 1: Blender nướng ánh sáng | `... bake` rồi `... three --baked` | `set-baked.glb` + `lightmap.png`, `threejs-baked.mp4` |
-| Cách 2: Blender render cả cảnh | `... render` | `blender.mp4` (Eevee, nhân vật là tấm hình đổ bóng) |
+| Cách 2: Blender render cả cảnh | `... render` | `blender.mp4` (Eevee, nhân vật là tấm hình đổ bóng; cùng tô màu PBR Neutral và cùng bộ màu `FOOD_GRADES` với three.js qua `scripts/grade_frames.py`, tắt bằng `--nograde`) |
 | Cách 3: clip AI từ bản Blender | `... ai` (chỉ báo giá) rồi `... ai --run --credit-ceiling N` | `ai.mp4` (Seedance 2.0 720p 5s = 215 credit; Grok Lite chỉ khung đầu = 95) |
 | Đặt cạnh nhau | `... compare` | `compare.mp4` |
 
@@ -211,7 +211,7 @@ So 3 cách làm đẹp hình trên cùng một cảnh 5 giây (`scripts/blender.
 - Có sẵn audio và mốc thời gian: `tts --import voice.wav --words words.json`.
 - Nhạc nền là bản tổng hợp đơn giản, không phải nhạc của thời kỳ nào. Dùng file nhạc có quyền rõ ràng: đặt `music.file` và `music.credit` trong `config.json`.
 - SFX chỉ phát theo sự kiện khai báo trong storyboard: crunch, thump, roll, knife, bell, page, steam, whoosh, fire, street, night, conveyor.
-- Bản mix: stereo 48 kHz, khoảng -15 LUFS, true peak dưới -1 dBTP; các stem nằm trong `audio/`.
+- Bản mix: stereo 48 kHz, khoảng -14 LUFS, true peak dưới -1 dBTP; các stem nằm trong `audio/`.
 
 ## 10. YouTube
 

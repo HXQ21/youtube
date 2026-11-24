@@ -2,6 +2,7 @@
 //   node scripts/blender.mjs make    --name bakery-test [--episode croissant --shot q05 --frames 150 --camera main:table --params '{"items":"croissant"}']
 //   node scripts/blender.mjs export  --name bakery-test     set.glb + scene.json + card pictures (src/core/BlenderExport.tsx)
 //   node scripts/blender.mjs three   --name bakery-test [--baked]   the shot rendered by three.js (baseline, or with the baked set)
+//   node scripts/blender.mjs stills  --name bakery-test [--at 0,75,149 --scale 0.5]   a few three.js frames (framing check)
 //   node scripts/blender.mjs bake    --name bakery-test     Blender Cycles bakes the light of the set  -> set-baked.glb + lightmap.png
 //   node scripts/blender.mjs render  --name bakery-test     Blender Eevee renders the whole shot       -> blender.mp4
 //   node scripts/blender.mjs ai      --name bakery-test [--model seedance_2.0|grok_imagine_1.5_lite] [--run --credit-ceiling N]
@@ -19,6 +20,7 @@ import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import { ROOT, ConfigError, readJson, writeJson } from "./lib/config.mjs";
 import { dm } from "./lib/dreamina.mjs";
+import { findBlender as findBlenderAt } from "./lib/blender-exe.mjs";
 
 const args = {}; const av = process.argv.slice(2), cmd = av[0] && !av[0].startsWith("--") ? av.shift() : "all";
 for (let i = 0; i < av.length; i++) if (av[i].startsWith("--")) args[av[i].slice(2)] = av[i + 1] && !av[i + 1].startsWith("--") ? av[++i] : true;
@@ -26,15 +28,7 @@ const name = String(args.name ?? "bakery-test"), DIR = path.join(ROOT, "out", "_
 const rel = (p) => path.relative(ROOT, p).split(path.sep).join("/");
 const tlFile = path.join(DIR, "timeline.json");
 
-export const findBlender = () => {
-  const c = [args.blender, process.env.BLENDER_EXE].filter((x) => x && x !== true);
-  for (const base of ["C:/Program Files/Blender Foundation", "D:/Program Files/Blender Foundation", "C:/Program Files (x86)/Steam/steamapps/common"]) {
-    if (!fs.existsSync(base)) continue;
-    const dirs = fs.readdirSync(base).filter((d) => /^blender/i.test(d)).sort((x, y) => y.localeCompare(x, undefined, { numeric: true }));
-    for (const d of dirs) c.push(path.join(base, d, "blender.exe"));
-  }
-  return c.find((x) => fs.existsSync(x)) ?? null;
-};
+export const findBlender = () => findBlenderAt(args.blender);
 const findChrome = () => [process.env.FOOD_CHROME, "C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe", "/usr/bin/google-chrome"].find((x) => x && fs.existsSync(x));
 const tmpDir = () => { const d = process.env.REMOTION_TMP || path.join(ROOT, ".cache", "remotion-tmp"); fs.mkdirSync(d, { recursive: true }); process.env.TEMP = process.env.TMP = process.env.TMPDIR = d; };
 let served = null;
@@ -53,7 +47,7 @@ const make = () => {
   const ep = String(args.episode ?? "croissant"), src = readJson(path.join(ROOT, "episodes", ep, "short", "timeline.json"));
   const base = src.shots.find((s) => s.id === String(args.shot ?? "q05")); if (!base) throw new ConfigError(`Không có shot ${args.shot} trong ${ep}`);
   const N = Number(args.frames ?? 150), [from, to] = String(args.camera ?? "main:table").split(":");
-  const params = { ...base.params, era: "1839", items: "croissant", action: "knead", ...(args.params ? JSON.parse(args.params) : {}) };
+  const params = { ...base.params, ...(base.scene === "bakery" ? { era: "1839", items: "croissant", action: "knead" } : {}), ...(args.params ? JSON.parse(args.params) : {}) };
   const shot = { ...base, id: "T1", a: 0, b: N, startSec: 0, camera: to ? { from, to, ease: "smooth" } : from, params, light: args.light ?? null, legend: false, static: false, transition: "cut", claims: [], label: null };
   const tl = { ...src, slug: `_blender-${name}`, timing: "aligned", totalFrames: N, durationSec: N / src.fps, captions: false, labels: false, words: [], segments: [], events: [], placeholders: [],
     chapters: [{ id: shot.chapter, title: "test", startSec: 0, endSec: N / src.fps, startFrame: 0, endFrame: N }], shots: [shot] };
@@ -110,6 +104,18 @@ const three = async (baked) => {
   console.log(`\r  three.js${baked ? " (đã nướng sáng)" : ""}: xong trong ${((Date.now() - t0) / 1000).toFixed(0)}s -> ${rel(out)}`);
 };
 
+// ------------------------------------------------------------------ stills: a few three.js frames for framing a shot fast
+const stills = async () => {
+  const tl = loadTl(), N = tl.totalFrames, at = String(args.at ?? `0,${Math.floor(N / 2)},${N - 1}`).split(",").map(Number);
+  const serveUrl = await serve(), { renderStill, selectComposition } = await import("@remotion/renderer");
+  const browserExecutable = findChrome(), chromiumOptions = { gl: args.gl ?? "angle" }, inputProps = { timeline: tl, mode: "final" };
+  const composition = await selectComposition({ serveUrl, id: "FoodEpisode", inputProps, browserExecutable, chromiumOptions });
+  const dir = path.join(DIR, "stills"); fs.mkdirSync(dir, { recursive: true });
+  for (const fr of at) { const out = path.join(dir, `f${String(fr).padStart(3, "0")}.jpg`);
+    await renderStill({ composition, serveUrl, frame: fr, output: out, imageFormat: "jpeg", scale: Number(args.scale ?? 0.5), inputProps, browserExecutable, chromiumOptions, timeoutInMilliseconds: 240000, logLevel: "error" });
+    console.log("  " + rel(out)); }
+};
+
 // ------------------------------------------------------------------ Blender steps
 const blender = (script, extra = []) => {
   const exe = findBlender();
@@ -124,9 +130,18 @@ const blender = (script, extra = []) => {
 };
 const ffmpeg = (a) => { const r = spawnSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", ...a], { stdio: "inherit" }); if (r.status !== 0) throw new Error("ffmpeg lỗi"); };
 const render = () => {
-  blender("render.py", args.samples ? ["--samples", String(args.samples)] : []);
+  blender("render.py", ["samples", "exposure", "sky", "glow", "cardglow", "ink", "upgrade", "bevel", "relief", "lamp", "atmo", "worldcool", "sunsat", "rt"].flatMap((k) => (args[k] !== undefined && args[k] !== true ? [`--${k}`, String(args[k])] : [])));
   const sc = readJson(path.join(DIR, "scene.json")), out = path.join(DIR, "blender.mp4");
-  ffmpeg(["-framerate", String(sc.fps), "-i", path.join(DIR, "frames", "f%04d.png"), "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", out]);
+  // finish with the same colour grade as the three.js renderer (FOOD_GRADES of the shot's light), unless --nograde
+  let frames = path.join(DIR, "frames");
+  if (!args.nograde && sc.grade) {
+    const g = path.join(DIR, "frames_graded"), py = process.platform === "win32" ? "python" : "python3";
+    fs.rmSync(g, { recursive: true, force: true });
+    const r = spawnSync(py, [path.join(ROOT, "scripts", "grade_frames.py"), path.join(DIR, "scene.json"), frames, g], { encoding: "utf8" });
+    if (r.status !== 0) throw new Error(`grade_frames.py lỗi: ${(r.stderr || r.stdout).slice(-400)}`);
+    console.log(`  ${r.stdout.trim()}`); frames = g;
+  }
+  ffmpeg(["-framerate", String(sc.fps), "-i", path.join(frames, "f%04d.png"), "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", out]);
   console.log(`  -> ${rel(out)}`);
 };
 const VERSIONS = [["threejs.mp4", "three.js (hien tai)"], ["threejs-baked.mp4", "Blender nuong sang + three.js"], ["blender.mp4", "Blender render"], ["ai.mp4", "Dreamina AI"]];
@@ -141,10 +156,23 @@ const compare = () => {
 };
 
 // ------------------------------------------------------------------ ai: Dreamina video steered by the Blender render
-const AI_PROMPT = "Re-render this exact shot as a warm, richly detailed 3D animated film: a Paris bakery in 1839, brick oven glowing, soft window light, " +
-  "gentle bounce light and contact shadows, wood grain, flour dust in the air, shallow depth of field. Keep the same camera move, composition, timing and " +
-  "every character's pose and action. Keep the characters as flat hand-drawn 2D cartoon figures (round bean heads, thin stick limbs, bold ink outlines). " +
-  "No text, no logos, no extra people.";
+// The look level follows skill/cartoon-3d-short/templates/VISUAL_DENSITY.md ("stylised cartoon game world, not a photo").
+// Two lessons: "richly detailed film" (street test, 2026-11-22) came out too realistic; a strict "keep exactly, add
+// nothing" (bakery-move v1, 2026-11-23) returned a near copy of the guide with no gain. The middle prompt keeps layout,
+// camera, objects and characters but asks the model to RE-LIGHT and RE-TEXTURE at the cartoon level.
+const AI_LOOK = "Re-light and re-texture this shot as a stylized cartoon 3D world: warm light pools from the visible light sources " +
+  "(fire, windows, lamps) with soft falloff into cooler shade, soft contact shadows and gentle bounce light; clean hand-painted " +
+  "textures with visible wood grain, brick, plaster and stone; simple rounded shapes; bold black ink outlines on characters and main " +
+  "objects; natural colours slightly brighter than life. NOT photorealistic: no grime, no film grain, no lens flare.";
+const AI_KEEP = "Keep the same camera move, framing, timing, layout and objects of the reference video; do not add new objects or " +
+  "people. Keep every character as the same flat 2D stick-figure cartoon (big round head, small body, thin stick limbs, bold ink " +
+  "outline) with the same clothes, pose and action. No text, no captions, no logos, no watermark.";
+const AI_DESC = {
+  bakery: "A small Paris bakery workshop in the 1830s at dawn: brick bread oven with a glowing wood fire, lime-plaster walls with dark timber " +
+    "framing, wooden shelves of loaves, copper pans on the wall, flour sacks, a wooden kneading trough, stone floor, warm window light.",
+  street: "A Paris street in the 1830s: a small bakery shopfront with a painted sign, tall townhouses with shutters, cobblestones, " +
+    "people queueing at the door, soft daylight.",
+};
 const ai = () => {
   const model = String(args.model ?? "seedance_2.0"), seed = model.startsWith("seedance");
   const src = ["blender.mp4", "threejs-baked.mp4", "threejs.mp4"].map((f) => path.join(DIR, f)).find((f) => fs.existsSync(f));
@@ -154,14 +182,18 @@ const ai = () => {
   const up = (file) => { const sig = `${file}|${fs.statSync(file).mtimeMs}`; if (!st.refs[sig]) { st.refs[sig] = dm(["resource", "upload", "--project-id", st.projectId, "--file", file]).resourceId; writeJson(stFile, st); } return st.refs[sig]; };
   const first = path.join(DIR, "ai-first.png");
   ffmpeg(["-i", src, "-frames:v", "1", first]);
-  const refs = seed ? [`res:${up(src)}`, `res:${up(first)}`] : [`res:${up(first)}`];
-  const key = `${model}|${path.basename(src)}`, gen = ["--project-id", st.projectId, "--model", model, "--mode", seed ? "m2v" : "first_last_frame", "--ratio", "9:16",
+  // extra image refs for Seedance (max 9 images): the channel's character sheet, plus --refs a.png,b.png
+  const extra = seed ? [path.join(ROOT, "..", "..", "brand", "character", "stick-turnaround.png"), ...String(args.refs ?? "").split(",").filter(Boolean).map((f) => path.resolve(ROOT, f))].filter((f) => fs.existsSync(f)) : [];
+  const refs = seed ? [`res:${up(src)}`, `res:${up(first)}`, ...extra.map((f) => `res:${up(f)}`)] : [`res:${up(first)}`];
+  const sceneId = fs.existsSync(path.join(DIR, "scene.json")) ? readJson(path.join(DIR, "scene.json")).scene : "";
+  const AI_PROMPT = [args.desc && args.desc !== true ? String(args.desc) : AI_DESC[sceneId] ?? "", AI_LOOK, AI_KEEP].filter(Boolean).join(" ");
+  const key = `${model}|${path.basename(src)}|v3`, gen = ["--project-id", st.projectId, "--model", model, "--mode", seed ? "m2v" : "first_last_frame", "--ratio", "9:16",
     "--resolution", seed ? "720p" : "720P", "--duration", "5", ...refs.flatMap((r) => ["--ref", r]), "--prompt", AI_PROMPT];
   st.nodes ??= {};
   const node = st.nodes[key] ? dm(["node", "edit", "video", "--node-id", st.nodes[key], ...gen]).node.nodeId : dm(["node", "create", "video", "--title", `ai ${model}`, "--x", "0", "--y", "0", ...gen]).node.nodeId;
   st.nodes[key] = node; writeJson(stFile, st);
   const q = dm(["node", "quote", "--project-id", st.projectId, "--node-id", node]);
-  console.log(`Clip AI ${model} 720p 5s, mốc: ${path.basename(src)}${seed ? " (video dẫn chuyển động)" : " (chỉ khung đầu)"}. Báo giá: ${q.totalMaxCredits} credit.`);
+  console.log(`Clip AI ${model} 720p 5s, mốc: ${path.basename(src)}${seed ? ` (video dẫn chuyển động + ${extra.length + 1} ảnh tham chiếu)` : " (chỉ khung đầu)"}. Báo giá: ${q.totalMaxCredits} credit.`);
   if (!args.run) { console.log(`Chưa tạo. Khi đã duyệt: node scripts/blender.mjs ai --name ${name} --model ${model} --run --credit-ceiling ${q.totalMaxCredits}`); return; }
   const ceiling = Number(args["credit-ceiling"]);
   if (!Number.isFinite(ceiling)) throw new ConfigError("--run cần --credit-ceiling <số credit đã duyệt>");
@@ -188,6 +220,7 @@ try {
   if (cmd === "make") make();
   else if (cmd === "export") await exportShot();
   else if (cmd === "three") await three(!!args.baked);
+  else if (cmd === "stills") await stills();
   else if (cmd === "bake") blender("bake.py", args.res ? ["--res", String(args.res)] : []);
   else if (cmd === "render") render();
   else if (cmd === "compare") compare();
@@ -196,5 +229,5 @@ try {
     if (!fs.existsSync(tlFile) || args.remake) make();
     await exportShot(); await three(false);
     if (findBlender()) { blender("bake.py"); await three(true); render(); compare(); } else console.log("Chưa có Blender: bỏ qua bước nướng sáng, render Blender và so sánh.");
-  } else throw new ConfigError(`Lệnh lạ: ${cmd} (make | export | three | bake | render | ai | compare | all)`);
+  } else throw new ConfigError(`Lệnh lạ: ${cmd} (make | export | three | stills | bake | render | ai | compare | all)`);
 } catch (e) { console.error(e instanceof ConfigError ? e.message : e?.stack ?? e); process.exit(1); }

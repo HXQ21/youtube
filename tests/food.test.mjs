@@ -18,8 +18,8 @@ const edit = (rel, fn) => { const f = path.join(epDir, "croissant", rel), j = JS
 const restore = (rel) => fs.copyFileSync(path.resolve("episodes/croissant", rel), path.join(epDir, "croissant", rel));
 
 // ------------------------------------------------------------ presets and overrides
-test("presets: short is 75 s vertical, long is 600 s (480-720) horizontal, both 30 fps", () => {
-  assert.deepEqual(cfg.resolveRender("short"), { format: "short", targetDurationSec: 75, minDurationSec: 60, maxDurationSec: 90, aspectRatio: "9:16", width: 1080, height: 1920, fps: 30, captions: false, labels: false });
+test("presets: short is 75 s vertical, long is 600 s (480-720) horizontal, both 30 fps; Shorts carry captions", () => {
+  assert.deepEqual(cfg.resolveRender("short"), { format: "short", targetDurationSec: 75, minDurationSec: 60, maxDurationSec: 90, aspectRatio: "9:16", width: 1080, height: 1920, fps: 30, captions: true, labels: false });
   const l = cfg.resolveRender("long");
   assert.equal(l.targetDurationSec, 600); assert.equal(l.minDurationSec, 480); assert.equal(l.maxDurationSec, 720); assert.equal(`${l.width}x${l.height}`, "1920x1080");
 });
@@ -290,3 +290,17 @@ test("CLI: final render stops with the asset id and folder when a required asset
   const e = cli("validate", "--episode", "pho", "--format", "short"); assert.equal(e.status, 1); assert.match(e.stdout + e.stderr, /Không có tập "pho"/);
 });
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+
+test("film: AI segments never cross a location or a shot, stay <= 15 s, and short ones are generated at 4 s", async () => {
+  const film = await import("../scripts/lib/film.mjs");
+  const shot = (id, scene, a, b) => ({ id, scene, a, b, note: `note ${id}` });
+  const tl = { fps: 30, shots: [shot("a", "bakery", 0, 60), shot("b", "bakery", 60, 300), shot("c", "bakery", 300, 500), shot("d", "street", 500, 530), shot("e", "bakery", 530, 900)] };
+  const s = film.planSegments(tl);
+  assert.deepEqual(s.map((g) => [g.scene, g.shots.join("")]), [["bakery", "ab"], ["bakery", "c"], ["street", "d"], ["bakery", "e"]]);
+  assert.ok(s.every((g) => g.genSec >= 4 && g.genSec <= 15 && g.genSec >= g.sec - 1e-6));
+  assert.equal(s[2].genSec, 4);                                    // a 1 s street insert is made at 4 s and trimmed
+  assert.throws(() => film.planSegments({ fps: 30, shots: [shot("x", "bakery", 0, 16 * 30)] }), /15s/);
+  const pics = film.picturesFor(s, (f) => f === "ai/s01.mp4" || f === "guide/s02.mp4");
+  assert.deepEqual(pics.map((p) => p && p.kind), ["ai", "guide", null, null]);
+  assert.match(film.aiPrompt(s[0], Object.fromEntries(tl.shots.map((x) => [x.id, x]))), /note a \| note b.*Keep exactly/);
+});

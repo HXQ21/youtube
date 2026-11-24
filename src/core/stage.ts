@@ -14,31 +14,33 @@ import { ctex, cloudHD } from "../videos/bridge/paint";
 import type { CamState, Ctx, Env, LightName, ShotInfo, ShotKind, V3 } from "./types";
 
 // ---------------------------------------------------------------- light presets
-type Sky = { c: [string, string, string, string, string]; e: [number, number, number, number, number]; bounce: V3; sat: number; grade: "day" | "golden" };
+type Sky = { c: [string, string, string, string, string]; e: [number, number, number, number, number]; bounce: V3; sat: number; grade: string }; // grade = key of FOOD_GRADES (grade.ts)
 const L = (o: Partial<LightPreset>): LightPreset => ({ ...LIGHTS.day, ...o });
+// Low-key look (2026-11-23, FOOD_GRADES in grade.ts, fitted to the reference colour statistics): deeper, near-neutral
+// slate shade with only a faint cool lift, a warm key, a lower sun for longer shadows, world saturation just under 1. The bridge short keeps its own LIGHTS untouched.
 export const FOOD_LIGHTS: Record<LightName, LightPreset> = {
-  day: LIGHTS.day,
+  day: L({ el: 36, lit: [1.66, 1.52, 1.3], shade: [0.27, 0.27, 0.32], lift: [0.014, 0.018, 0.03] }),
   golden: LIGHTS.golden,
   // warm room lit through a window on screen-left: bakery, café, kitchen
-  interior: L({ az: -62, el: 36, lit: [1.5, 1.34, 1.1], shade: [0.44, 0.37, 0.36], lift: [0.07, 0.05, 0.04], term: 0.25, charTint: [1.0, 0.92, 0.84], charShade: 0.9,
+  interior: L({ az: -62, el: 36, lit: [1.66, 1.42, 1.1], shade: [0.34, 0.3, 0.31], lift: [0.014, 0.014, 0.022], term: 0.25, charTint: [1.0, 0.92, 0.84], charShade: 0.9,
     fog: "#c9a47e", fogNear: 40, fogFar: 260, sunCol: "#ffe2bd", sunI: 2.6 }),
   // food close-ups: large soft key from upper back-left, bright warm shade so colours and glaze stay readable
-  table: L({ az: -38, el: 52, lit: [1.62, 1.5, 1.28], shade: [0.56, 0.48, 0.44], lift: [0.08, 0.06, 0.05], lambert: 0.45, term: 0.3, charTint: [1.0, 0.94, 0.88], charShade: 0.92,
+  table: L({ az: -38, el: 52, lit: [1.66, 1.5, 1.3], shade: [0.42, 0.39, 0.42], lift: [0.02, 0.02, 0.03], lambert: 0.45, term: 0.3, charTint: [1.0, 0.94, 0.88], charShade: 0.92,
     fog: "#e8d5bb", fogNear: 30, fogFar: 200, sunCol: "#fff0dc", sunI: 2.8 }),
   // moonlit night for legend scenes
   night: L({ az: 118, el: 34, lit: [0.5, 0.6, 0.92], shade: [0.09, 0.11, 0.23], lift: [0.02, 0.03, 0.07], term: 0.15, charTint: [0.7, 0.8, 1.0], charShade: 0.8, sideTint: [0.8, 0.84, 1.0],
     fog: "#1b2347", fogNear: 18, fogFar: 170, sunCol: "#a9c0ff", sunI: 2.0 }),
   // flat cool overhead light: factory floor, supermarket
-  cool: L({ az: 25, el: 68, lit: [1.42, 1.46, 1.5], shade: [0.52, 0.55, 0.62], lift: [0.06, 0.07, 0.09], term: 0.3, charTint: [0.96, 0.98, 1.0], charShade: 0.92,
+  cool: L({ az: 25, el: 68, lit: [1.48, 1.48, 1.46], shade: [0.32, 0.34, 0.4], lift: [0.015, 0.02, 0.035], term: 0.3, charTint: [0.96, 0.98, 1.0], charShade: 0.92,
     fog: "#d6dee7", fogNear: 40, fogFar: 300, sunCol: "#f2f6ff", sunI: 2.6 }),
 };
 export const FOOD_SKY: Record<LightName, Sky> = {
-  day: { c: ["#b8d0ec", "#9cbfea", "#6a9fe0", "#4f8cdb", "#3373cc"], e: [0, 3, 8, 16, 40], bounce: [0, 0, 0], sat: 1.08, grade: "day" },
-  golden: { c: ["#ffc47c", "#f7ae78", "#e8967c", "#c4848e", "#8a6f8a"], e: [0, 4, 10, 20, 40], bounce: [0.04, 0.02, 0], sat: 1.1, grade: "golden" },
-  interior: { c: ["#d9b78f", "#cfa67c", "#b98e68", "#9a7354", "#6f5240"], e: [0, 6, 14, 26, 50], bounce: [0.05, 0.03, 0.01], sat: 1.06, grade: "day" },
-  table: { c: ["#f0dcc0", "#ead1b0", "#dfc19c", "#cfae88", "#b99672"], e: [0, 6, 14, 26, 50], bounce: [0.05, 0.035, 0.015], sat: 1.12, grade: "day" },
-  night: { c: ["#2a3566", "#222b58", "#1a2149", "#12183a", "#0a0e2a"], e: [0, 4, 10, 22, 45], bounce: [0, 0, 0], sat: 1.0, grade: "golden" },
-  cool: { c: ["#dfe6ee", "#d3dce6", "#c4cfdb", "#b3c0cf", "#9fadbf"], e: [0, 6, 14, 26, 50], bounce: [0, 0, 0], sat: 1.0, grade: "day" },
+  day: { c: ["#b8d0ec", "#9cbfea", "#6a9fe0", "#4f8cdb", "#3373cc"], e: [0, 3, 8, 16, 40], bounce: [0, 0, 0], sat: 0.95, grade: "cine" },
+  golden: { c: ["#ffc47c", "#f7ae78", "#e8967c", "#c4848e", "#8a6f8a"], e: [0, 4, 10, 20, 40], bounce: [0.04, 0.02, 0], sat: 0.98, grade: "cineWarm" },
+  interior: { c: ["#d9b78f", "#cfa67c", "#b98e68", "#9a7354", "#6f5240"], e: [0, 6, 14, 26, 50], bounce: [0.05, 0.03, 0.01], sat: 0.95, grade: "cineWarm" },
+  table: { c: ["#f0dcc0", "#ead1b0", "#dfc19c", "#cfae88", "#b99672"], e: [0, 6, 14, 26, 50], bounce: [0.05, 0.035, 0.015], sat: 1.02, grade: "cineTable" },
+  night: { c: ["#2a3566", "#222b58", "#1a2149", "#12183a", "#0a0e2a"], e: [0, 4, 10, 22, 45], bounce: [0, 0, 0], sat: 0.9, grade: "cineNight" },
+  cool: { c: ["#dfe6ee", "#d3dce6", "#c4cfdb", "#b3c0cf", "#9fadbf"], e: [0, 6, 14, 26, 50], bounce: [0, 0, 0], sat: 0.92, grade: "cine" },
 };
 
 export const CAM_NEAR = 0.02, CAM_FAR = 4000;
@@ -269,13 +271,49 @@ export const drift = (c: CamState, u: number, k = 0.06, side = 0.03): CamState =
 /** shot table for scenes that never contain 2D characters (free camera: top-down, orbit, dutch are all fine there) */
 export const noChars = (kinds: Record<string, ShotKind>): Record<string, ShotInfo> => Object.fromEntries(Object.entries(kinds).map(([k, kind]) => [k, { kind, chars: false }]));
 export const dirOf = (yawDeg: number, pitchDeg: number): V3 => { const y = THREE.MathUtils.degToRad(yawDeg), p = THREE.MathUtils.degToRad(pitchDeg); return [Math.sin(y) * Math.cos(p), Math.sin(p), Math.cos(y) * Math.cos(p)]; };
-/** Camera for shots that show flat 2D characters. By construction: level horizon (no roll), elevation within +-10 deg
- *  of eye level, on the audience side of the stage (|yaw| <= 40 deg, so the front drawing is always what we should see),
- *  a longish lens (default 30 deg) so close-ups do not distort. `portrait` = [centre, w, h] to re-frame for vertical video. */
+/** Camera for shots that show flat 2D characters. By construction: level horizon (no roll), on the audience side of the
+ *  stage (|yaw| <= 40 deg, so the front drawing is always what we should see), a longish lens (default 30 deg) so
+ *  close-ups do not distort. Elevation is up to +-18 deg (PITCH_MAX): the story picks low hero angles or high reveals;
+ *  beyond +-12 declare the set-up `drama: true` in the scene's `shots` so camcheck accepts it (FEEDBACK_LOG #17).
+ *  `portrait` = [centre, w, h] to re-frame for vertical video. */
 export const charCam = (centre: V3, w: number, h: number, o: { yaw?: number; pitch?: number; fov?: number; cInf?: number; push?: number; side?: number; margin?: number; portrait?: [V3, number, number]; pyaw?: number; ppitch?: number } = {}) => (c: Ctx): CamState => {
   // vertical video frames the same width from much farther away, so a set-up may give its own yaw / pitch for portrait
   // (a strong side angle would push the camera through a side wall, a high aim point would look down on the cast)
-  const tall = c.aspect < 1, yaw = Math.max(-40, Math.min(40, (tall ? o.pyaw : undefined) ?? o.yaw ?? 0)), pitch = Math.max(-10, Math.min(10, (tall ? o.ppitch : undefined) ?? o.pitch ?? 4)), [C, W, H] = tall && o.portrait ? o.portrait : [centre, w, h];
+  const tall = c.aspect < 1, yaw = Math.max(-40, Math.min(40, (tall ? o.pyaw : undefined) ?? o.yaw ?? 0)), pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, (tall ? o.ppitch : undefined) ?? o.pitch ?? 4)), [C, W, H] = tall && o.portrait ? o.portrait : [centre, w, h];
   return drift(frame(C, W, H, dirOf(yaw, pitch), c.aspect, o.fov ?? 30, o.margin ?? 1.08, o.cInf ?? 8), c.u, o.push ?? 0.04, o.side ?? 0.02);
+};
+/** The channel's default for character shots since FEEDBACK_LOG #14 (RicksClips study): the same safety rules as
+ *  charCam (level, near eye level, audience side) but a WIDE lens from CLOSE (fov 50-60 deg, 2-4 m), a strong 3/4
+ *  angle and a bigger push, so floor, walls and ceiling converge and the room has depth; the lead fills 35-60% of the
+ *  frame height. Flat cards do not distort under a wide lens as long as they stay away from the frame edges (camcheck
+ *  DISTORT). Pair every hero set-up with a foreground piece (a prop 1-2 m from the lens at a frame edge). */
+export const heroCam = (centre: V3, w: number, h: number, o: Parameters<typeof charCam>[3] = {}) =>
+  charCam(centre, w, h, { fov: 54, cInf: 6, push: 0.08, side: 0.035, margin: 1.04, yaw: -32, pitch: 2, ...o });
+
+// ---------------------------------------------------------------- story cameras (FEEDBACK_LOG #17)
+/** max elevation from eye level for any camera that shows 2D characters (camcheck errors past RULES.pitchErr = 20) */
+export const PITCH_MAX = 18;
+/** Low hero angle: heroCam from below the lead's head, looking up, for power, threat, triumph. Aim `centre` near head
+ *  height: the lens then sits about 15-18 deg below the head (pitch -9 toward the centre, steeper toward the head).
+ *  Declare it in the scene's `shots` as { kind, chars: true, drama: true }. */
+export const lowCam = (centre: V3, w: number, h: number, o: Parameters<typeof charCam>[3] = {}) =>
+  heroCam(centre, w, h, { pitch: -9, ppitch: -9, push: 0.08, ...o });
+/** High reveal: above the cast looking down (pitch +14), for "look how many / how small". drama: true. */
+export const highCam = (centre: V3, w: number, h: number, o: Parameters<typeof charCam>[3] = {}) =>
+  heroCam(centre, w, h, { pitch: 14, ppitch: 14, push: 0.08, ...o });
+/** Point of view: the camera sits at a character's eyes (`eye`, world space) and looks at `target`, with a small push
+ *  toward it. The viewer's own card must be hidden by the scene for this shot. Others seen from eye height stay level. */
+export const povCam = (eye: V3, target: V3, o: { fov?: number; push?: number; cInf?: number } = {}) => (c: Ctx): CamState =>
+  drift({ pos: eye, look: target, fov: o.fov ?? 50, cInf: o.cInf ?? 6 }, c.u, o.push ?? 0.1, 0.01);
+/** A camera path through several set-ups in one shot: fly-in from the sky to a door, through a window into the room,
+ *  following an object to the next subject. Keys are camera functions (any of the above) and the shot's progress u is
+ *  spread evenly over the legs, eased at both ends of the whole move (`ease: "out"` = fast start that settles). When a
+ *  key shows characters and another does not, declare the set-up with the stricter policy (scene `shots`). */
+export const pathCam = (keys: ((c: Ctx) => CamState)[], o: { ease?: "smooth" | "out" | "linear" } = {}) => (c: Ctx): CamState => {
+  const n = keys.length - 1;
+  if (n < 1) return keys[0](c);
+  const u = o.ease === "linear" ? c.u : o.ease === "out" ? easeOut(c.u) : smooth(c.u), x = Math.min(n - 1e-6, u * n), i = Math.floor(x);
+  const at = (k: number) => keys[k]({ ...c, u: k / n });
+  return mixCam(at(i), at(i + 1), x - i); // linear inside a leg, so the move never stops at a key; the ends are eased above
 };
 export const actionT = (c: Ctx, name: string, fallback: number) => c.actions.find((a) => a.name === name)?.t ?? fallback;

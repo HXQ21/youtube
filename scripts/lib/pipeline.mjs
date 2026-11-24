@@ -62,7 +62,7 @@ const VOICE = { // the voice the user approved for the croissant episode (Bella,
   pronunciations: [], chunkMaxChars: 4500, chunkGapSec: 0.55, budget: { maxTotalChars: 10000, maxRegenerations: 1 },
 };
 const FORMAT_CONFIG = {
-  short: { format: "short", render: {}, leadInSec: 0.15, tailPadSec: 0.6, estimateWpm: 143, voiceSettings: { speed: 1.0 }, music: { style: "cafe", gainDb: -20, duckDb: -9, file: null }, sfxGainDb: -13 },
+  short: { format: "short", render: {}, leadInSec: 0.15, tailPadSec: 0.6, estimateWpm: 175, voiceSettings: { speed: 1.1 }, music: { style: "cafe", gainDb: -20, duckDb: -9, file: null }, sfxGainDb: -13 },
   long: { format: "long", render: {}, leadInSec: 0.6, tailPadSec: 2.0, estimateWpm: 151, music: { style: "cafe", gainDb: -22, duckDb: -9, file: null }, sfxGainDb: -14 },
 };
 export const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,40}$/;

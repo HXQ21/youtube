@@ -4,6 +4,7 @@ import { FoodEpisode, calcEpisode, EpisodeProps } from "./core/Episode";
 import type { Timeline } from "./core/types";
 import { CastSheet, CastProps } from "./core/CastSheet";
 import { BlenderExport, BlenderExportProps } from "./core/BlenderExport";
+import { FoodAssembly, calcAssembly, AssemblyProps } from "./edit/Assembly";
 
 // Built-in 5 s sample so Remotion Studio opens without arguments. Real episodes pass their timeline as props:
 //   node scripts/food.mjs render --episode <slug> --format short|long
@@ -19,6 +20,10 @@ export const RemotionRoot: React.FC = () => {
       {/* every food-history episode, Short or Long, any aspect ratio: size and length come from the timeline */}
       <Composition id="FoodEpisode" component={FoodEpisode} calculateMetadata={calcEpisode} durationInFrames={150} fps={30} width={1080} height={1920}
         defaultProps={{ timeline: SAMPLE, mode: "preview" } as EpisodeProps} />
+      {/* the film from finished clips (Blender layout renders / Seedance re-renders) + the 2D layer: transitions, legend frame,
+          labels, captions. No three.js (2026-11-24). */}
+      <Composition id="FoodAssembly" component={FoodAssembly} calculateMetadata={calcAssembly} durationInFrames={150} fps={30} width={1080} height={1920}
+        defaultProps={{ timeline: SAMPLE as unknown as AssemblyProps["timeline"], pictures: [], mode: "preview" } as AssemblyProps} />
       {/* character sheet drawn by the episode character code (scripts/cast-sheet.mjs) */}
       <Composition id="CastSheet" component={CastSheet} durationInFrames={1} fps={30} width={1920} height={1080} defaultProps={{ who: "chef", v: 0 } as CastProps} />
       {/* hands a stretch of an episode to Blender (scripts/blender.mjs export) */}

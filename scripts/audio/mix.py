@@ -3,7 +3,7 @@
   python scripts/audio/mix.py <timeline.json> <voice.wav | -> <out_dir> [--force]
 
 Writes stems (voice.wav, music.wav, sfx.wav), mix.wav (stereo, 48 kHz, exactly the video length) and mix_report.json.
-Targets: about -15 LUFS integrated, true peak <= -1 dBTP, measured on the written file with ffmpeg.
+Targets: about -14 LUFS integrated (Shorts loudness, decided 2026-11-24; was -15), true peak <= -1 dBTP, measured on the written file with ffmpeg.
 Music is a simple synthesized bed (plucked waltz figure + soft pad); it is NOT period music and is never presented as such.
 A music file with clear rights can replace it (timeline music.file). SFX are synthesized and only fire on events
 declared in the storyboard. A fingerprint of the inputs is stored so an unchanged run is skipped (use --force).
@@ -12,6 +12,8 @@ import hashlib, json, os, subprocess, sys, wave
 sys.stdout.reconfigure(encoding="utf-8", errors="replace"); sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # Windows pipes default to cp1252
 import numpy as np
 from scipy import signal
+
+TARGET_LUFS = -14.0   # integrated loudness of the final mix (VISUAL_DENSITY.md section 6)
 
 SR = 48000
 
@@ -178,23 +180,23 @@ def main():
     mix = np.stack([voice, voice], axis=1) + mus + sfx
     write_wav(os.path.join(out, "voice.wav"), voice); write_wav(os.path.join(out, "music.wav"), mus); write_wav(os.path.join(out, "sfx.wav"), sfx)
     raw = os.path.join(out, "_mix_raw.wav"); mix /= max(1.0, np.abs(mix).max() / 0.98); write_wav(raw, mix)
-    # normalise to -15 LUFS with a true-peak ceiling: static gain first, limiter only if the peak would exceed -1 dBTP
-    # A soft limiter first tames isolated SFX peaks, then a static gain lands on -15 LUFS; the gain is lowered if the
+    # normalise to TARGET_LUFS with a true-peak ceiling: static gain first, limiter only if the peak would exceed -1 dBTP
+    # A soft limiter first tames isolated SFX peaks, then a static gain lands on TARGET_LUFS; the gain is lowered if the
     # measured true peak would pass -1 dBTP (keeps the voice natural: no dynamic loudness riding).
     final = os.path.join(out, "mix.wav"); lim = os.path.join(out, "_mix_lim.wav")
-    for limit in (0.7, 0.5, 0.36, 0.26, 0.18):   # the gentlest limiter that still lets the static gain reach -15 LUFS under the ceiling
+    for limit in (0.7, 0.5, 0.36, 0.26, 0.18):   # the gentlest limiter that still lets the static gain reach TARGET_LUFS under the ceiling
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", raw, "-af", f"alimiter=limit={limit}:attack=2:release=80:level=disabled", "-ar", str(SR), "-c:a", "pcm_s16le", lim], check=True)
         I, tp = measure(lim)
-        if -15.0 - I <= -1.3 - tp: break
-    gain = min(-15.0 - I, -1.3 - tp)
+        if TARGET_LUFS - I <= -1.3 - tp: break
+    gain = min(TARGET_LUFS - I, -1.3 - tp)
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", lim, "-af", f"volume={gain:.2f}dB", "-ar", str(SR), "-ac", "2", "-c:a", "pcm_s16le", final], check=True)
     I2, tp2 = measure(final); os.remove(raw); os.remove(lim)
     with wave.open(final, "rb") as w: dur = w.getnframes() / SR
-    rep = {"fingerprint": fp, "durationSec": round(dur, 3), "videoSec": round(total, 3), "sampleRate": SR, "channels": 2, "integratedLUFS": I2, "truePeakDb": tp2, "targetLUFS": -15, "ceilingDbTP": -1,
+    rep = {"fingerprint": fp, "durationSec": round(dur, 3), "videoSec": round(total, 3), "sampleRate": SR, "channels": 2, "integratedLUFS": I2, "truePeakDb": tp2, "targetLUFS": TARGET_LUFS, "ceilingDbTP": -1,
            "hasVoice": has_voice, "music": music_src, "musicGainDb": mcfg["gainDb"], "duckDb": mcfg["duckDb"], "sfxCount": len(used), "sfx": used, "stems": ["voice.wav", "music.wav", "sfx.wav"]}
     json.dump(rep, open(rep_path, "w"), indent=1)
-    ok = abs(I2 + 15) <= 1.0 and tp2 <= -1.0 and abs(dur - total) < 0.05
+    ok = abs(I2 - TARGET_LUFS) <= 1.0 and tp2 <= -1.0 and abs(dur - total) < 0.05
     print(f"mix.wav: {dur:.2f}s (video {total:.2f}s), {I2:.1f} LUFS, true peak {tp2:.1f} dBTP, {len(used)} SFX, nhạc: {music_src}" + ("" if has_voice else "  [KHÔNG CÓ GIỌNG ĐỌC: bản nháp]"))
-    if not ok: print("CẢNH BÁO: chưa đạt mục tiêu -15 LUFS (+-1), true peak <= -1 dBTP, hoặc độ dài lệch video."); sys.exit(2)
+    if not ok: print(f"CẢNH BÁO: chưa đạt mục tiêu {TARGET_LUFS:.0f} LUFS (+-1), true peak <= -1 dBTP, hoặc độ dài lệch video."); sys.exit(2)
 
 main()

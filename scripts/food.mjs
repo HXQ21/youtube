@@ -370,6 +370,16 @@ const commands = {
     if (r.status !== 0) process.exitCode = 1;
     const ok = r.status === 0; setStatus(slug, format, { step: ok ? "qa-ok" : "qa-fail", stepVi: ok ? `QA đạt (${q})` : `QA KHÔNG ĐẠT (${q})`, qa: { ok, quality: q, dir: outRel(path.join(dir, `qa-${q}${variant(ep)}`)) } }, ok ? "QA đạt" : "QA không đạt");
   },
+  async pace() {
+    // shots with people / food (storyboard notes), frozen half-seconds and motion (video), words per second (timeline)
+    const [slug, format] = slugFmt(), ep = loadEpisode(slug, format, cliRender()), q = args.quality ?? "preview", dir = outDir(slug, format), py = python();
+    const video = args.video ? path.resolve(args.video) : [path.join(dir, `${name(ep, q)}.mp4`), path.join(dir, `${name(ep, q)}.silent.mp4`)].find((f) => fs.existsSync(f));
+    const sb = path.join(path.dirname(tlFile(ep)), "storyboard.json"), out = path.join(dir, `pace-${q}${variant(ep)}.md`);
+    fs.mkdirSync(dir, { recursive: true });
+    const r = spawnSync(py, [path.join(ROOT, "scripts", "qa", "pace.py"), sb, tlFile(ep), video ?? "-", out], { stdio: "inherit" });
+    console.log(`-> ${rel(out)}`);
+    if (r.status !== 0) process.exitCode = 1;
+  },
 };
 
 // ---------------------------------------------------------------- render (stills + video, chunked, resumable)
@@ -456,9 +466,10 @@ Lệnh:
   studio [--port 3123]   xem trực tiếp trong Remotion Studio, có tiếng (kéo thanh thời gian, xem từng khung)
   still [--frames 0,300,shotId | --shots all] [--quality draft|preview|final|hq]
   render [--quality ...] [--frames a-b | --chapter id] [--chunk-frames 900] [--concurrency n] [--force]
-  mix [--force]          nhạc nền + SFX + giọng -> stems + mix.wav (-15 LUFS, <= -1 dBTP)
+  mix [--force]          nhạc nền + SFX + giọng -> stems + mix.wav (-14 LUFS, <= -1 dBTP)
   mux [--quality ...]    ghép hình + mix.wav -> MP4, kiểm tra thời lượng
   qa [--quality ...] [--video f.mp4] [--every 10]
+  pace [--quality ...] [--video f.mp4]   kiểm nhịp: % shot có người / món, nửa giây đứng yên, chuyển động, tốc độ lời
 Quy trình món ăn (các lệnh /mon-... trong Claude Code dùng các lệnh này; --episode current = món đang làm):
   new --episode <slug> --dish "Tên món" [--formats short|short,long]   tạo thư mục tập mới, đặt làm món đang làm
   pipeline [--current <slug>] [--stage <bước>] [--note "..."]          xem / đổi bước của món (suggested ... final)

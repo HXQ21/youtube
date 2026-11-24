@@ -19,11 +19,12 @@ const COATS = ["#3f6fb5", "#8c3b4a", "#5d7a3a", "#b5653f", "#2f5f6a", "#7b5ac9"]
 export const outfitFor = (who: Who, v: number): Outfit => {
   const skin = SKINS[v % 4];
   switch (who) {
-    case "baker": return { jacket: "#f3efe4", pants: "#6a5a4a", boots: "#4a3426", skin, build: v % 2 ? "stout" : "adult", ...(v % 3 === 1 ? { moustache: "#4a3426" } : {}) };
+    // a coloured neckerchief on every working outfit: a small accent colour and a detail that reads at Short size (RicksClips gap, FEEDBACK_LOG #14)
+    case "baker": return { jacket: "#f3efe4", pants: "#6a5a4a", boots: "#4a3426", skin, build: v % 2 ? "stout" : "adult", neck: ["#c8402f", "#3f6fb5", "#d9a441"][v % 3], ...(v % 3 === 1 ? { moustache: "#4a3426" } : {}) };
     // classic baker from the channel's character sheet (references/own/characters/chef-*.png): tall toque, double-breasted
     // white jacket, long apron with flour, red neckerchief, big moustache, sturdy build
     case "chef": return { jacket: "#fbf8f0", pants: "#4a4650", boots: "#3a2a20", skin, build: "stout", moustache: "#4a2f20", hat: "toque", neck: "#d23a32", apron: "#fffdf6", flour: true, buttons2: true, bigMoustache: true };
-    case "apprentice": return { jacket: "#e9e2d0", pants: "#5a5046", boots: "#4a3426", skin, build: "kid" };
+    case "apprentice": return { jacket: "#e9e2d0", pants: "#5a5046", boots: "#4a3426", skin, build: "kid", neck: "#3f8a5a" };
     // early-modern townsfolk: caps and bonnets, no top hats
     case "towns": return v % 2 ? { jacket: COATS[v % 6], pants: "#3b3f52", boots: "#4a3426", skin, hat: "bonnet", dress: ["#a8763a", "#8a5a6a", "#56708a"][v % 3] } : { jacket: COATS[(v + 2) % 6], pants: "#4a4238", boots: "#3a2a20", skin, hat: "cap", cap: "#6a4a32" };
     // 1830s-1840s Paris street: top hats and bonnets

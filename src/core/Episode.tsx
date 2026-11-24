@@ -10,7 +10,7 @@ import { EffectComposer } from "@react-three/postprocessing";
 import { BlendFunction, BloomEffect, ToneMappingEffect, ToneMappingMode } from "postprocessing";
 import { InkPass, noInkFallback } from "../videos/bridge/ink";
 import { LensBlur } from "../videos/bridge/lensblur";
-import { GradeEffect, GRADES } from "../videos/bridge/grade";
+import { GradeEffect, FOOD_GRADES } from "../videos/bridge/grade";
 import { Stage, loadKit, makeEnv, Loaded, CAM_NEAR, CAM_FAR } from "./stage";
 import { Host, frameState, shotAt, auditTimeline } from "./direct";
 import type { Env, SceneInst, Timeline } from "./types";
@@ -42,7 +42,7 @@ const Inner: React.FC<{ tl: Timeline; env: Env }> = ({ tl, env }) => {
     // the glow keeps the same size relative to the frame at any output size: the MIP chain starts at a fixed base height
     const mip = bloom.mipmapBlurPass, setSize = mip.setSize.bind(mip), baseH = height >= width ? 1920 : 1440;
     mip.setSize = (w: number, h: number) => setSize(Math.round((baseH * w) / Math.max(h, 1)), baseH);
-    return { ink: new InkPass(scene, cam), lens: new LensBlur({ maxCoC: 24, nearScale: 1.2 }), bloom, tone: new ToneMappingEffect({ mode: ToneMappingMode.NEUTRAL }), grade: new GradeEffect(GRADES.day, 1) };
+    return { ink: new InkPass(scene, cam), lens: new LensBlur({ maxCoC: 24, nearScale: 1.2 }), bloom, tone: new ToneMappingEffect({ mode: ToneMappingMode.NEUTRAL }), grade: new GradeEffect(FOOD_GRADES.cine, 1) };
   }, [cam, scene, width, height]);
   useEffect(() => () => fx.ink.dispose(), [fx]);
   const post = useMemo(() => (
@@ -66,7 +66,7 @@ const Inner: React.FC<{ tl: Timeline; env: Env }> = ({ tl, env }) => {
   fx.lens.focus = Math.max(0.03, fp.dot(fwd));
   fx.lens.cInf = c.cInf ?? 0;
   const tag = fx.grade as unknown as { _g?: string };
-  if (tag._g !== grade) { fx.grade.set(GRADES[grade]); tag._g = grade; }
+  if (tag._g !== grade) { fx.grade.set(FOOD_GRADES[grade] ?? FOOD_GRADES.cine); tag._g = grade; }
   return (
     <>
       <primitive object={stage.root} dispose={null} />

@@ -6,7 +6,7 @@ export type V3 = [number, number, number];
 export type CameraSpec = string | { from: string; to: string; ease?: "linear" | "smooth" | "out" };
 export type TLShot = {
   id: string; scene: string; a: number; b: number; startSec: number; chapter: string; camera: CameraSpec; params: Record<string, unknown>;
-  light: string | null; legend: boolean; static: boolean; transition: "cut" | "dip" | "whip"; claims: string[]; assets: string[];
+  light: string | null; legend: boolean; static: boolean; transition: "cut" | "dip" | "whip" | "dissolve"; claims: string[]; assets: string[];
   label: { text: string; claim: string } | null; seed: number;
 };
 export type TLEvent = { type: "sfx" | "action"; name: string; shot: string; sec: number; frame: number; gainDb: number; durSec: number | null };
@@ -39,7 +39,8 @@ export type Ctx = {
 };
 /** shot size of a named camera, and whether flat 2D characters may appear in it */
 export type ShotKind = "wide" | "medium" | "closeup" | "food" | "detail" | "top";
-export type ShotInfo = { kind: ShotKind; chars: boolean };
+/** `drama`: a story-driven angle (low hero, high reveal, POV) that may sit up to RULES.pitchDrama off eye level */
+export type ShotInfo = { kind: ShotKind; chars: boolean; drama?: boolean };
 /** what the camera audit needs to know about one visible character card */
 export type ActorInfo = {
   id: string; pos: V3;                 // feet, world space
