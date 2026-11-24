@@ -105,25 +105,3 @@ def new_character(name, collection, lights=False):
     ob = bpy.data.objects.new(name, gp)
     collection.objects.link(ob)
     return ob
-
-
-class Drawer:
-    """one Grease Pencil character: draws each distinct pose once, later frames with the same pose share that drawing"""
-
-    def __init__(self, ob):
-        self.ob, self.layer, self.first, self.done = ob, ob.data.layers[0], {}, set()
-
-    def show(self, frame, key, draw):
-        if frame in self.done:          # (frames.get() takes no frame number: keep our own record)
-            return
-        if key in self.first:
-            self.layer.frames.copy(self.first[key], frame, instance_drawing=True)
-        else:
-            write(self.layer.frames.new(frame).drawing, draw())
-            self.first[key] = frame
-        self.done.add(frame)
-
-    def blank(self, frame):
-        if frame not in self.done:
-            self.layer.frames.new(frame)
-            self.done.add(frame)

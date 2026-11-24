@@ -188,21 +188,18 @@ Tất cả khai báo trong `storyboard.json`, không sửa mã:
 - **Nhấn nhịp** (sự kiện `"type": "action"`): `kick` rung máy tắt dần, `flash` chớp trắng 5 khung, `crunch` bẻ đôi bánh, `mark` tô sáng dòng tư liệu.
 - **Tốc độ đọc riêng cho từng bản**: `"voiceSettings": { "speed": 1.0 }` trong `config.json` của format (không ảnh hưởng cache giọng của bản còn lại).
 
-## 8c. Blender trong quy trình (đang thử)
+## 8c. Blender → Seedance → Remotion (đường mới, không three.js)
 
-So 3 cách làm đẹp hình trên cùng một cảnh 5 giây (`scripts/blender.mjs`, file ở `out/_blender/<tên>/`):
+Blender chỉ dựng bố cục (vị trí, máy quay, nhân vật, động tác); Seedance vẽ lại hình đẹp; Remotion chồng chữ và ghép (`scripts/film.mjs`).
 
 | Bước | Lệnh | Ra |
 |---|---|---|
-| Cắt cảnh thử từ tập | `node scripts/blender.mjs make --name bakery-test` | `timeline.json` (tiệm bánh, camera main → table, nhào bột) |
-| Xuất cho Blender | `... export` | `set.glb` (bối cảnh), `scene.json` (camera, vật chuyển động, nhân vật từng frame), `cards/*.png` |
-| Bản three.js làm mốc | `... three` | `threejs.mp4` |
-| Cách 1: Blender nướng ánh sáng | `... bake` rồi `... three --baked` | `set-baked.glb` + `lightmap.png`, `threejs-baked.mp4` |
-| Cách 2: Blender render cả cảnh | `... render` | `blender.mp4` (Eevee, nhân vật là tấm hình đổ bóng; cùng tô màu PBR Neutral và cùng bộ màu `FOOD_GRADES` với three.js qua `scripts/grade_frames.py`, tắt bằng `--nograde`) |
-| Cách 3: clip AI từ bản Blender | `... ai` (chỉ báo giá) rồi `... ai --run --credit-ceiling N` | `ai.mp4` (Seedance 2.0 720p 5s = 215 credit; Grok Lite chỉ khung đầu = 95) |
-| Đặt cạnh nhau | `... compare` | `compare.mp4` |
+| Chia đoạn AI (≤ 15 giây, mỗi đoạn một địa điểm) | `node scripts/film.mjs segments --episode <slug> --format short` | `segments.json`, danh sách bối cảnh `.blend` còn thiếu |
+| Bản mốc Blender | `node scripts/film.mjs guide --episode <slug> --format short [--segment s01] [--quality draft]` | `guide/sNN.mp4` (`blender/shot.py` trên `blender/sets/<cảnh>.blend`) |
+| Seedance (chỉ báo giá) | `node scripts/film.mjs ai ...` rồi `--run --credit-ceiling N` khi đã duyệt | `ai/sNN.mp4` |
+| Ghép | `node scripts/film.mjs assemble ...` | `<slug>-<format>-WxH-<q>.silent.mp4` (`FoodAssembly`) |
 
-`all` chạy hết (trừ bước AI). Blender: cài từ blender.org; script tự tìm trong `Program Files\Blender Foundation`, hoặc `--blender <đường dẫn>` / biến `BLENDER_EXE`. Script Blender ở `blender/` (`bake.py`, `render.py`, `common.py`). Lưới vật được đặt tên `m<số>` theo thứ tự dựng, nên bản nướng sáng khớp đúng vật trong cảnh; vật chuyển động không nướng mà vẫn tô kiểu toon. Bản nướng sáng hiện chỉ đúng cho một bộ tham số cảnh (thời kỳ, đồ trên khay).
+Bối cảnh `blender/sets/<cảnh>.blend` theo quy ước `CAM-<tên>`, `MARK-<vai>`, `ACT-<tên>`; nhân vật và động tác ở `blender/sets/<cảnh>.py`. Nhân vật Grease Pencil được vẽ một lần mỗi tư thế thành ảnh PNG (`blender/kit.py`, lưu ở `out/_cache/cards`) và dựng trên tấm phẳng để bối cảnh che được nhân vật. Blender: `D:pplender.exe`, hoặc `--blender <đường dẫn>` / biến `BLENDER_EXE`.
 
 ## 9. Âm thanh
 

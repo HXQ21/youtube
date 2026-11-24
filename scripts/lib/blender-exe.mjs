@@ -1,5 +1,5 @@
 // Where Blender is: --blender <path>, BLENDER_EXE, D:\app\blender.exe (this machine), Program Files, or the Windows
-// installed-apps list. Shared by scripts/blender.mjs and scripts/film.mjs.
+// installed-apps list. Used by scripts/film.mjs.
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
