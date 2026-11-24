@@ -13,8 +13,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "draw"))
 import bpy
 from mathutils import Vector, Quaternion
-import gpwrite
-from people import pose_key, SIZE, outfit_for
+sys.path.insert(0, HERE)
+from people import pose_key
+# Blender 5.3's F12/background Eevee draws live Grease Pencil over every mesh, so each pose is baked once to a cached
+# transparent PNG (kit.card_png) and shown on an upright lit card plane that occludes and casts shadows.
+from kit import card_png, card_mat, CARD_X, CARD_Z0, CARD_Z1
 
 
 def log(*a):
@@ -35,6 +38,61 @@ EASE = {"linear": lambda u: u, "smooth": lambda u: u * u * (3 - 2 * u), "out": l
 
 def cam_spec(c):
     return (c, c, "smooth") if isinstance(c, str) else (c["from"], c["to"], c.get("ease", "smooth"))
+
+
+ON_TWOS = 2
+
+
+class Cast:
+    """one character: an empty that stands on its mark and turns to the camera, with one card plane per distinct pose
+    parented to it; each frame shows exactly one card (hide_render keyed with constant interpolation)"""
+    def __init__(self, cid, who, v, coll):
+        self.cid, self.who, self.v, self.coll = cid, who, v, coll
+        self.root = bpy.data.objects.new(f"CAST-{cid}", None)
+        coll.objects.link(self.root)
+        self.cards, self.shown = {}, {}       # pose key -> plane; frame -> pose key (None = off screen)
+
+    def card(self, key, f, o):
+        if key in self.cards:
+            return self.cards[key]
+        path = card_png(self.who, self.v, f, **o)
+        me = bpy.data.meshes.new(f"{self.cid}-{len(self.cards):03d}")
+        me.from_pydata([(-CARD_X, 0, CARD_Z0), (CARD_X, 0, CARD_Z0), (CARD_X, 0, CARD_Z1), (-CARD_X, 0, CARD_Z1)], [], [(0, 1, 2, 3)])
+        uv = me.uv_layers.new(name="UVMap")
+        for li, c in zip(me.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
+            uv.data[li.index].uv = c
+        me.materials.append(card_mat(path))
+        ob = bpy.data.objects.new(me.name, me)
+        self.coll.objects.link(ob)
+        ob.parent = self.root
+        ob["card"] = path
+        self.cards[key] = ob
+        return ob
+
+    def show(self, fr, f, q, cam_pos):
+        if q is None:
+            self.shown[fr] = None
+            return
+        prev = self.shown.get(fr - 1)
+        if prev is not None and fr % ON_TWOS:   # 2D animation "on twos": the drawing changes every other frame
+            key = prev
+        else:
+            key, _ = pose_key(self.who, self.v, f, q.get("o", {}))
+            self.card(key, f, q.get("o", {}))
+        self.shown[fr] = key
+        at = Vector(q["at"])
+        d = Vector(cam_pos) - at
+        self.root.location = at
+        self.root.rotation_euler = (0.0, 0.0, math.atan2(d.x, -d.y))   # the card's front (-Y) turns toward the camera
+        self.root.keyframe_insert("location", frame=fr)
+        self.root.keyframe_insert("rotation_euler", frame=fr)
+
+    def finish(self):
+        for key, ob in self.cards.items():
+            for fr, k in sorted(self.shown.items()):
+                ob.hide_render = ob.hide_viewport = k != key
+                ob.keyframe_insert("hide_render", frame=fr)
+                ob.keyframe_insert("hide_viewport", frame=fr)
 
 
 def main():
@@ -74,8 +132,7 @@ def main():
     people = {}
     if mod:
         for cid, who, v in mod.CAST:
-            ob = gpwrite.new_character(cid, coll, lights=False)
-            people[cid] = (ob, gpwrite.Drawer(ob), who, v)
+            people[cid] = Cast(cid, who, v, coll)
     for f in range(a, b):
         s = next(x for x in shots if x["a"] <= f < x["b"])
         lf, dur = f - s["a"], (s["b"] - s["a"]) / fps
@@ -107,21 +164,10 @@ def main():
                "chars": bool(A.get("chars", True))}
         cam_pos = tuple(rc.location)
         poses = mod.pose(ctx, s, marks, acts, cam_pos) if ctx["chars"] else {}
-        for cid, (ob, dr, who, v) in people.items():
-            q = poses.get(cid)
-            ob.hide_render = q is None
-            ob.keyframe_insert("hide_render", frame=fr)
-            if q is None:
-                dr.blank(fr)
-                continue
-            key, draw = pose_key(who, v, f, q.get("o", {}))
-            dr.show(fr, key, draw)
-            at = Vector(q["at"])
-            ob.location = at
-            d = Vector(cam_pos) - at
-            ob.rotation_euler = (0.0, 0.0, math.atan2(d.x, -d.y))   # the card's front (-Y) turns toward the camera
-            ob.keyframe_insert("location", frame=fr)
-            ob.keyframe_insert("rotation_euler", frame=fr)
+        for cid, c in people.items():
+            c.show(fr, f, poses.get(cid), cam_pos)
+    for c in people.values():
+        c.finish()
     # quick layout render: Eevee, few samples; no ink, no grade (Seedance paints the final look)
     for eng in ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE"):
         try:
@@ -136,7 +182,8 @@ def main():
     sc.frame_start, sc.frame_end = a - seg["a"] + 1, b - seg["a"]
     sc.render.image_settings.file_format = "PNG"
     sc.render.filepath = os.path.join(out, "f####")
-    log(f"{scene_id}: {seg['id']} khung {a}-{b - 1}, {len(people)} nhân vật, {quality}")
+    sc.frame_set(sc.frame_start)
+    log(f"{scene_id}: {seg['id']} khung {a}-{b - 1}, {len(people)} nhân vật, {sum(len(c.cards) for c in people.values())} thẻ tư thế, {quality}")
     bpy.ops.render.render(animation=True)
     log("xong")
 
