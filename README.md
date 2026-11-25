@@ -12,7 +12,7 @@ Mỗi tập có hai bản dùng chung nghiên cứu và asset:
 
 Thời lượng, tỷ lệ, kích thước, phụ đề và nhãn đều đổi được cho từng tập hoặc từng lần chạy. Tập mẫu: `episodes/croissant`.
 
-Ví dụ cây cầu gốc được giữ nguyên làm tham khảo phong cách (`src/videos/bridge`, composition `BridgeShort`).
+Code của video cây cầu gốc (`src/videos/bridge`) chỉ còn vì các module hình dùng chung (nét mực, nhòe ống kính, chỉnh màu, tô hai tông, nhân vật). Nó **không** phải mẫu nội dung hay phong cách: quy tắc của kênh chỉ nằm trong `skill/cartoon-3d-short/huong-dan/`.
 
 ## 1. Kiểm tra môi trường
 
@@ -105,7 +105,7 @@ scripts/qa/qa_stream.py   QA đọc video theo luồng
 scripts/scene-still.mjs   ảnh kiểm tra một cảnh / asset ở nhiều tỷ lệ
 src/core/                 bộ render chung (Episode.tsx, stage.ts, types.ts)
 src/scenes/               thư viện cảnh: pastry, lamination, bakery, street, siege, page, factory
-src/videos/bridge/        ví dụ gốc; ink, lens blur, grade, tô hai tông, nhân vật được dùng chung từ đây
+src/videos/bridge/        module hình dùng chung (ink, lens blur, grade, tô hai tông, nhân vật); phần còn lại là video cây cầu cũ, không dùng làm mẫu
 public/assets/            model 3D (xem asset-manifest.json)
 out/<slug>/<format>/      video, ảnh, báo cáo QA
 tests/food.test.mjs       node --test tests/food.test.mjs
