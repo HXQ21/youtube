@@ -4,6 +4,7 @@
 //                                   Blender layout render of each segment from blender/sets/<scene>.blend -> out/<slug>/<format>/guide/sNN.mp4
 //   node scripts/film.mjs ai       --episode <slug> [--segment s01]         quote every segment on Dreamina (no credits spent)
 //   node scripts/film.mjs ai       --episode <slug> --segment s01 --run --credit-ceiling N    generate after the user approved N credits
+//        [--style auto|<image>]  a style target image (auto: a frame of the old three.js final at the segment's middle; only segments with no characters and no legend)
 //   node scripts/film.mjs approve  --episode <slug> --segment s01[,s02]      mark Seedance clips the user watched and accepted
 //   node scripts/film.mjs assemble --episode <slug> [--quality preview|final]  clips + 2D layer -> silent mp4 (then food.mjs mix, mux, qa)
 // Credits: only `ai --run` spends them, never above --credit-ceiling, and only after a quote the user approved.
@@ -17,7 +18,7 @@ import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { ROOT, PRESETS, ConfigError, loadEpisode, outDir, readJson, writeJson } from "./lib/config.mjs";
 import { resolveSlug } from "./lib/pipeline.mjs";
-import { planSegments, picturesFor, aiPrompt, segmentKey, chooseClip, pickCastSheets } from "./lib/film.mjs";
+import { planSegments, picturesFor, aiPrompt, segmentKey, chooseClip, pickCastSheets, PROMPT_VERSION } from "./lib/film.mjs";
 import { dm } from "./lib/dreamina.mjs";
 import { findBlender } from "./lib/blender-exe.mjs";
 
@@ -129,16 +130,28 @@ const ai = () => {
     if (done?.key === key && done.approved && !args.force) { console.log(`${g.id}: đã có clip được duyệt cho đúng đoạn này, bỏ qua`); continue; }
     const cr = castRefs(gm.cast);
     if (cr.missing.length) throw new ConfigError(`Đoạn ${g.id} có nhân vật chưa có bảng mẫu: ${cr.missing.join(", ")}. Dựng bằng: blender -b --python blender/castsheet.py -- --who <tên> --v <số> --out out/_cast_brand/<tên>-v<số>.png`);
+    // style target (#25): one picture of the look we want, so Seedance repaints instead of copying the plain guide
+    let style = null;
+    if (args.style === "auto") {
+      const old = path.join(c.dir, `${c.slug}-${c.format}-${c.tl.width}x${c.tl.height}-final.mp4`), legend = c.tl.shots.some((s) => g.shots.includes(s.id) && s.legend);
+      // old three.js frames show the OLD bean-head cast: use them only where no character is on screen
+      if (fs.existsSync(old) && !legend && !(gm.cast ?? []).length) {
+        style = path.join(c.dir, "style", `${g.id}.png`); fs.mkdirSync(path.dirname(style), { recursive: true });
+        const r = spawnSync("ffmpeg", ["-v", "error", "-y", "-ss", ((g.a + g.b) / 2 / c.tl.fps).toFixed(2), "-i", old, "-frames:v", "1", style]);
+        if (r.status !== 0 || !fs.existsSync(style)) style = null;
+      }
+    } else if (args.style && args.style !== true) style = path.resolve(ROOT, String(args.style));
+    if (style && !fs.existsSync(style)) throw new ConfigError(`Không thấy ảnh mẫu phong cách ${style}`);
     const ratio = c.tl.width > c.tl.height ? "16:9" : c.tl.width === c.tl.height ? "1:1" : "9:16";
     const gen = ["--project-id", st.projectId, "--model", model, "--mode", "m2v", "--ratio", ratio, "--resolution", "720p", "--duration", String(g.genSec),
-      "--ref", `res:${up(gv)}`, ...[...cr.refs, ...refsExtra].flatMap((f) => ["--ref", `res:${up(f)}`]), "--prompt", aiPrompt(g, byId, c.tl.fps, cr.refs.length > 0)];
+      "--ref", `res:${up(gv)}`, ...[...cr.refs, ...refsExtra, ...(style ? [style] : [])].flatMap((f) => ["--ref", `res:${up(f)}`]), "--prompt", aiPrompt(g, byId, c.tl.fps, cr.refs.length > 0, !!style)];
     st.nodes ??= {};
     const nodeKey = `${g.id}|${model}`;
     const node = st.nodes[nodeKey] ? dm(["node", "edit", "video", "--node-id", st.nodes[nodeKey], ...gen]).node.nodeId : dm(["node", "create", "video", "--title", `${c.slug} ${g.id}`, "--x", "0", "--y", "0", ...gen]).node.nodeId;
     st.nodes[nodeKey] = node; writeJson(stFile, st);
     const q = dm(["node", "quote", "--project-id", st.projectId, "--node-id", node]);
     total += q.totalMaxCredits;
-    console.log(`${g.id} (${g.genSec}s, ${g.scene}): ${q.totalMaxCredits} credit; mẫu nhân vật: ${cr.refs.map((f) => path.basename(f)).join(", ") || "không (đoạn không có người)"}`);
+    console.log(`${g.id} (${g.genSec}s, ${g.scene}): ${q.totalMaxCredits} credit; mẫu nhân vật: ${cr.refs.map((f) => path.basename(f)).join(", ") || "không (đoạn không có người)"}; mẫu phong cách: ${style ? rel(style) : "không"}`);
     if (!args.run) continue;
     const ceiling = Number(args["credit-ceiling"]);
     if (!Number.isFinite(ceiling)) throw new ConfigError("--run cần --credit-ceiling <số credit đã duyệt>");
@@ -161,11 +174,17 @@ const ai = () => {
     if (!r) throw new ConfigError(`Dreamina báo lỗi (${n.status}) ở ${g.id}`);
     const out = path.join(c.dir, "ai", `${g.id}.mp4`), part = `${out}.part`;
     fs.mkdirSync(path.dirname(out), { recursive: true }); fs.rmSync(part, { force: true });
+    // keep the previous paid clip for comparison: ai/old/sNN-<time>.mp4 (+ .json)
+    if (fs.existsSync(out)) {
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-"), dst = path.join(c.dir, "ai", "old", `${g.id}-${stamp}`);
+      fs.mkdirSync(path.dirname(dst), { recursive: true }); fs.renameSync(out, `${dst}.mp4`);
+      if (fs.existsSync(out.replace(/\.mp4$/, ".json"))) fs.renameSync(out.replace(/\.mp4$/, ".json"), `${dst}.json`);
+    }
     dm(["resource", "download", r.resourceId, "--project-id", st.projectId, "-o", part]); fs.renameSync(part, out);
-    writeJson(out.replace(/\.mp4$/, ".json"), { key, guide: gm, prompt: aiPrompt(g, byId, c.tl.fps, cr.refs.length > 0), model, nodeId: node, credits: q.totalMaxCredits, approved: false, at: new Date().toISOString() });
+    writeJson(out.replace(/\.mp4$/, ".json"), { key, guide: gm, prompt: aiPrompt(g, byId, c.tl.fps, cr.refs.length > 0, !!style), promptVersion: PROMPT_VERSION, style: style ? rel(style) : null, model, nodeId: node, credits: q.totalMaxCredits, approved: false, at: new Date().toISOString() });
     console.log(`  -> ${rel(out)} (chưa duyệt: xem rồi chạy film.mjs approve --segment ${g.id})`);
   }
-  console.log(`Tổng báo giá ${segs.length} đoạn: ${total} credit.${args.run ? "" : ` Chưa tạo. Khi đã duyệt (cùng đoạn, mẫu, model, format như lúc báo giá): node scripts/film.mjs ai --episode ${c.slug} --format ${c.format}${args.segment ? ` --segment ${args.segment}` : ""} --model ${model}${args.refs ? ` --refs "${args.refs}"` : ""} --run --credit-ceiling ${total}`}`);
+  console.log(`Tổng báo giá ${segs.length} đoạn: ${total} credit.${args.run ? "" : ` Chưa tạo. Khi đã duyệt (cùng đoạn, mẫu, model, format như lúc báo giá): node scripts/film.mjs ai --episode ${c.slug} --format ${c.format}${args.segment ? ` --segment ${args.segment}` : ""} --model ${model}${args.refs ? ` --refs "${args.refs}"` : ""}${args.style ? ` --style ${args.style}` : ""} --run --credit-ceiling ${total}`}`);
 };
 
 // ------------------------------------------------------------------ approve: the user watched these clips and accepts them

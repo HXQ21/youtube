@@ -80,14 +80,17 @@ export const pickCastSheets = (cast, sheets, max = 3) => {
 // captions, emphasis words, signs and the legend sepia stay in Remotion (2026-11-24 review: s06 got the editor's
 // "Danger" emphasis and the sepia request, which Remotion then applied a second time).
 // the channel look (SKILL.md: "toon-shaded 3D sets with black ink lines"): the guides carry no ink (Blender only lays
-// out), so the prompt has to ask for it, or Seedance paints a plain 3D cartoon (#24)
-export const AI_LOOK = "Re-render this layout as a polished stylised 3D cartoon film shot in a toon-shaded world: every object and the set have bold near-black ink outlines "
-  + "on their silhouettes and main edges, like the characters, with two-tone cel shading. Warm motivated light from the visible sources (oven fire, windows, lamps) "
-  + "with soft shadows and gentle bounce light, cooler shade, clean hand-painted materials (wood grain, brick, plaster, stone, flour, copper), "
-  + "rich but natural colours, light atmosphere and depth. Not photorealistic: no grime, no film grain, no lens flares. Full natural colour (no sepia, no vignette).";
-export const AI_KEEP = "Keep exactly: the camera path and timing of the reference video, the composition, every object's position, the characters' positions, poses, actions "
-  + "and expressions. The flat 2D stick-figure characters stay flat 2D cartoon cards with bold ink outlines, drawn exactly like the character reference sheets (one sheet per character type); "
-  + "do not turn them into 3D people. No text, letters, logos or captions anywhere, and no extra characters. Keep any cut exactly where it is.";
+// out), so the prompt has to ask for it, or Seedance paints a plain 3D cartoon (#24).
+// Prompt v2 (2026-11-25, #25): the change comes FIRST and concretely, the keep list is short and never says "exactly"
+// or "every object's position". v1 put a long strict keep list last; s01-s07 (754 credits) came back as near-copies of
+// the guide, the same effect memory/dreamina-cli.md recorded on 2026-11-23 (bakery-move).
+export const PROMPT_VERSION = 2;
+export const AI_LOOK = "Repaint this shot in a toon-shaded cartoon film style. Change the surfaces, not the layout: bold near-black ink outlines on the silhouette and main edges "
+  + "of every object and of the set, two-tone cel shading, new motivated light (warm pools from fire, windows and lamps, soft cast shadows, cooler shade), "
+  + "and hand-painted textures (wood grain, brick, plaster, cobbles, flour, crust). The reference video is a plain layout render: do not copy its flat colours or bare surfaces. "
+  + "Not photorealistic, no film grain, no lens flares, full natural colour (no sepia).";
+export const AI_KEEP = "Keep from the reference video: the camera move and its timing, where things stand, and what the characters do. "
+  + "The 2D characters stay flat cartoon cards with ink outlines, drawn like their design sheets; do not turn them into 3D people. No text or letters, no extra characters, keep any cut where it is.";
 
 const ITEMS = { croissant: "a golden croissant", kipferl: "a crescent-shaped Viennese kipferl bread roll", cut: "a croissant broken in half showing its flaky layered inside",
   cutk: "a kipferl broken in half showing its dense bread crumb", pair: "a kipferl and a croissant side by side" };
@@ -115,13 +118,14 @@ export const shotText = (s) => {
 };
 
 /** what each reference is for (BytePlus: give every reference one role) */
-export const REF_ROLES = (sheets) => "Use the reference video only for layout, timing, camera motion and what every object and character does."
-  + (sheets ? " Use the reference images only for how the characters look (one design sheet per character type): copy their design, not the sheet's poses, labels or background." : "");
+export const REF_ROLES = (sheets, style) => "References: the video gives the motion and layout only."
+  + (sheets ? " The character sheets give how the characters look, not their poses or labels." : "")
+  + (style ? " The last image is the style target: match its ink outlines, cel shading, light and colour, not its layout." : "");
 
 /** the Seedance prompt for one segment: what happens (from structured params), the clip length, the references, the look, the rules */
-export const aiPrompt = (seg, shotsById, fps = 30, sheets = false) => {
+export const aiPrompt = (seg, shotsById, fps = 30, sheets = false, style = false) => {
   const shots = seg.shots.map((id) => shotsById[id]).filter(Boolean);
   const parts = shots.map((s, i) => `${shots.length > 1 ? `Shot ${i + 1} (${((s.b - s.a) / fps).toFixed(1)} s): ` : ""}${shotText(s)}${s.ai ? `. ${s.ai}` : ""}.`);
   const hold = seg.genSec > seg.sec + 0.05 ? ` The story lasts the first ${seg.sec.toFixed(1)} s; after that the reference holds the last shot, keep it calm and continuous.` : "";
-  return [parts.join(" "), `The clip is ${seg.genSec} s.${hold}`, REF_ROLES(sheets), AI_LOOK, AI_KEEP].join(" ");
+  return [AI_LOOK, parts.join(" "), `The clip is ${seg.genSec} s.${hold}`, REF_ROLES(sheets, style), AI_KEEP].join(" ");
 };
