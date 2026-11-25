@@ -325,7 +325,7 @@ test("film: AI segments never cross a location or a shot, stay <= 15 s, and shor
   assert.deepEqual(film.pickCastSheets([], ["baker-v0.png"]), { files: [], missing: [] });
   // the Seedance prompt comes from structured params, never the editor's note, and never asks for sepia or text
   const pr = film.aiPrompt(s2[0], Object.fromEntries(tl2.shots.map((x) => [x.id, x])));
-  assert.match(pr, /Vienna street/); assert.doesNotMatch(pr, /note v/); assert.match(pr, /no sepia/); assert.match(pr, /first 2\.0 s/);
+  assert.match(pr, /Vienna street/); assert.doesNotMatch(pr, /note v/); assert.match(pr, /no sepia/); assert.match(pr, /ink outlines/); assert.match(pr, /first 2\.0 s/);
   assert.match(pr, /reference video only for layout/); assert.doesNotMatch(pr, /design sheet/);
   assert.match(film.aiPrompt(s2[0], Object.fromEntries(tl2.shots.map((x) => [x.id, x])), 30, true), /design sheet per character type/);
 });

@@ -79,7 +79,10 @@ export const pickCastSheets = (cast, sheets, max = 3) => {
 // Only what the picture model needs: subject, action, place, camera, references, what may change. Editing notes,
 // captions, emphasis words, signs and the legend sepia stay in Remotion (2026-11-24 review: s06 got the editor's
 // "Danger" emphasis and the sepia request, which Remotion then applied a second time).
-export const AI_LOOK = "Re-render this layout as a polished stylised 3D cartoon film shot: warm motivated light from the visible sources (oven fire, windows, lamps) "
+// the channel look (SKILL.md: "toon-shaded 3D sets with black ink lines"): the guides carry no ink (Blender only lays
+// out), so the prompt has to ask for it, or Seedance paints a plain 3D cartoon (#24)
+export const AI_LOOK = "Re-render this layout as a polished stylised 3D cartoon film shot in a toon-shaded world: every object and the set have bold near-black ink outlines "
+  + "on their silhouettes and main edges, like the characters, with two-tone cel shading. Warm motivated light from the visible sources (oven fire, windows, lamps) "
   + "with soft shadows and gentle bounce light, cooler shade, clean hand-painted materials (wood grain, brick, plaster, stone, flour, copper), "
   + "rich but natural colours, light atmosphere and depth. Not photorealistic: no grime, no film grain, no lens flares. Full natural colour (no sepia, no vignette).";
 export const AI_KEEP = "Keep exactly: the camera path and timing of the reference video, the composition, every object's position, the characters' positions, poses, actions "

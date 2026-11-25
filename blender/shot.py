@@ -15,6 +15,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "draw"))
 import bpy
 from mathutils import Vector, Quaternion
+from bpy_extras.object_utils import world_to_camera_view
 sys.path.insert(0, HERE)
 from people import pose_key
 # Blender 5.3's F12/background Eevee draws live Grease Pencil over every mesh, so each pose is baked once to a cached
@@ -100,6 +101,51 @@ class Cast:
                 ob.hide_render = ob.hide_viewport = k != key
                 ob.keyframe_insert("hide_render", frame=fr)
                 ob.keyframe_insert("hide_viewport", frame=fr)
+
+
+def framing(sc, cam, people, frames, out):
+    """the subject must stay inside the frame (three.js stage.ts frame() did this by construction; hand-placed Blender
+    cameras do not, #24). Subjects: objects named SUBJ-* (or custom prop subject=1), else the small object under the
+    frame centre at the focus distance; plus each visible character's head. Writes frame_check.json, returns issues."""
+    issues, dg = [], None
+    def box_out(ob):
+        # how much of the projected bounding box lies outside the frame, as a share of its size (0 = all inside)
+        pts = [world_to_camera_view(sc, cam, ob.matrix_world @ Vector(c)) for c in ob.bound_box]
+        pts = [p for p in pts if p.z > 0]
+        if len(pts) < 8:
+            return 1.0
+        x0, x1 = min(p.x for p in pts), max(p.x for p in pts)
+        y0, y1 = min(p.y for p in pts), max(p.y for p in pts)
+        w, h = max(1e-6, x1 - x0), max(1e-6, y1 - y0)
+        return max((max(0, -x0) + max(0, x1 - 1)) / w, (max(0, -y0) + max(0, y1 - 1)) / h)
+    tagged = [ob for ob in sc.objects if ob.type == "MESH" and (ob.name.startswith("SUBJ-") or ob.get("subject"))]
+    for fr in frames:
+        sc.frame_set(fr)
+        dg = bpy.context.evaluated_depsgraph_get()
+        subs = [ob for ob in tagged if not ob.hide_render and min(ob.matrix_world.to_scale()) > 1e-3]
+        if not subs:
+            mw = cam.matrix_world
+            hit, loc, _n, _i, ob, _m = sc.ray_cast(dg, mw.translation, (mw.to_quaternion() @ Vector((0, 0, -1))).normalized())
+            if hit and ob and ob.type == "MESH" and max(ob.dimensions) < 1.5 and not (ob.parent and ob.parent.name.startswith("CAST-")):
+                subs = [ob]
+        for ob in subs:
+            o = box_out(ob)
+            if o > 0.15:
+                issues.append({"fr": fr, "what": "món/vật chính bị cắt", "name": ob.name, "out": round(o, 2)})
+        for c in people.values():
+            key = c.shown.get(fr)
+            if key is None:
+                continue
+            base = c.root.matrix_world.translation
+            face = world_to_camera_view(sc, cam, base + Vector((0, 0, 1.44)))      # head centre (people.SIZE, adult)
+            crown = world_to_camera_view(sc, cam, base + Vector((0, 0, 1.68)))
+            on = face.z > 0 and 0.0 <= face.x <= 1.0 and 0.0 <= face.y <= 1.0
+            if on and crown.y > 1.0:
+                issues.append({"fr": fr, "what": "đầu nhân vật bị cắt ở mép trên", "name": c.cid, "out": round(crown.y - 1.0, 2)})
+            elif face.z > 0 and 0.0 <= face.y <= 1.0 and (-0.06 < face.x < 0.0 or 1.0 < face.x < 1.06):
+                issues.append({"fr": fr, "what": "mặt nhân vật lọt ở mép khung", "name": c.cid, "out": round(min(abs(face.x), abs(face.x - 1)), 2)})
+    json.dump(issues, open(os.path.join(out, "frame_check.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    return issues
 
 
 def main():
@@ -209,6 +255,11 @@ def main():
     sc.frame_start, sc.frame_end = a - seg["a"] + 1, b - seg["a"]
     sc.render.image_settings.file_format = "PNG"
     sc.render.filepath = os.path.join(out, "f####")
+    story_end = min(seg["b"], b) - seg["a"]        # the padded tail is not checked
+    chk = framing(sc, rc, people, list(range(sc.frame_start, story_end + 1, 6)) or [sc.frame_start], out)
+    if chk:
+        names = sorted({f'{i["what"]} ({i["name"]})' for i in chk})
+        log(f"CHÚ Ý khung hình: {len(chk)} lần kiểm có lỗi: {'; '.join(names[:6])}")
     sc.frame_set(sc.frame_start)
     log(f"{scene_id}: {seg['id']} khung {a}-{b - 1}, {len(people)} nhân vật, {sum(len(c.cards) for c in people.values())} thẻ tư thế, {quality}")
     bpy.ops.render.render(animation=True)

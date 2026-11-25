@@ -94,8 +94,16 @@ const guide = () => {
       const fz = spawnSync("ffmpeg", ["-hide_banner", "-i", out, "-t", String(g.sec), "-vf", "freezedetect=n=0.002:d=0.5", "-map", "0:v", "-f", "null", "-"], { encoding: "utf8" });
       const frozen = [...`${fz.stderr}`.matchAll(/freeze_duration: ([\d.]+)/g)].reduce((n, m) => n + Number(m[1]), 0);
       if (frozen > 0) console.log(`  CHÚ Ý ${g.id}: ${frozen.toFixed(1)}s / ${g.sec}s đứng yên (mục tiêu ≤ 3 %): thêm chuyển động máy (CAM-<tên>End, push/side) hoặc động tác`);
+      // exposure (#24): Seedance copies a washed-out or crushed guide
+      const shotsOf = c.tl.shots.filter((s) => g.shots.includes(s.id)), light = shotsOf.filter((s) => s.light === "night").length * 2 > shotsOf.length ? "night" : shotsOf.some((s) => s.light === "golden") ? "golden" : "day";
+      const ex = spawnSync(process.platform === "win32" ? "python" : "python3", [path.join(ROOT, "scripts", "qa", "guide_check.py"), out, String(g.sec), light], { encoding: "utf8" });
+      let exposure = null;
+      try { exposure = JSON.parse(ex.stdout.trim().split(/\r?\n/).pop()); } catch { console.log(`  (không đo được độ sáng ${g.id})`); }
+      if (exposure?.warn?.length) console.log(`  CHÚ Ý ${g.id} (${light}): ${exposure.warn.join("; ")}`);
+      const fc = path.join(fdir, "frame_check.json"), framingIssues = fs.existsSync(fc) ? readJson(fc) : [];
+      if (framingIssues.length) console.log(`  CHÚ Ý ${g.id}: khung hình ${[...new Set(framingIssues.map((i) => `${i.what} (${i.name})`))].join("; ")}`);
       const castFile = path.join(fdir, "cast.json"), cast = fs.existsSync(castFile) ? readJson(castFile) : [];
-      writeJson(path.join(c.dir, "guide", `${g.id}.json`), { key: segmentKey(c.tl, g), set: setVersion(g.scene), cast, quality: q, a: g.a, b: g.b, genSec: g.genSec, shots: g.shots, at: new Date().toISOString() });
+      writeJson(path.join(c.dir, "guide", `${g.id}.json`), { key: segmentKey(c.tl, g), set: setVersion(g.scene), cast, exposure, framing: framingIssues.length, frozenSec: +frozen.toFixed(2), quality: q, a: g.a, b: g.b, genSec: g.genSec, shots: g.shots, at: new Date().toISOString() });
     }
     console.log(`${g.id}: ${args.frames ? `khung ${args.frames}` : rel(out)} (${((Date.now() - t0) / 1000).toFixed(0)}s)`);
   }
