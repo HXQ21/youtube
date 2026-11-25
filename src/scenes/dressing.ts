@@ -1,5 +1,5 @@
 // Set dressing shared by the scenes: clean painted textures and storytelling props for the "real-material world,
-// flat cartoon people" look (skill/cartoon-3d-short/templates/VISUAL_DENSITY.md, core elements 1, 3 and 5).
+// flat cartoon people" look (skill/cartoon-3d-short/huong-dan/04-mau-sac-anh-sang.md, core elements 1, 3 and 5).
 // Level: a stylised game world, not a photo: simple rounded shapes, clean hand-painted texture, no grime.
 // Everything is procedural (canvas textures, primitive geometry): no download, no credits.
 import * as THREE from "three";

@@ -163,14 +163,14 @@ Làm bằng tay (các lệnh ở trên dùng chính các bước này):
 
 ## 7b. Nhân vật người que
 
-Nhân vật trong video được vẽ bằng code (`src/videos/bridge/toon.ts`; trang phục từng loại người ở `outfitFor` trong `src/scenes/people.ts`). Ảnh Dreamina trong `skill/cartoon-3d-short/references/own/characters/` chỉ là mẫu tham chiếu.
+Nhân vật trong video được vẽ bằng code (`src/videos/bridge/toon.ts`; trang phục từng loại người ở `outfitFor` trong `src/scenes/people.ts`). Quy tắc thiết kế nhân vật: `skill/cartoon-3d-short/huong-dan/05-nhan-vat.md`.
 - Xem một nhân vật đúng như trong video: `node scripts/cast-sheet.mjs --who chef [--v 0]` xuất `out/_cast/<who>-v<v>.png`, gồm 7 biểu cảm, 4 tư thế tay làm việc và dáng đi nghiêng.
 - Loại người hiện có: `baker`, `chef` (thợ bánh cổ điển: mũ cao, áo hai hàng cúc, tạp dề dài, khăn cổ đỏ, ria mép to), `apprentice`, `towns`, `paris`, `officer`, `worker`, `modern`.
 
 ## 8a. Vân bề mặt và phông nền bằng Dreamina
 
 Tường, mặt tiền, sàn, bầu trời đúng thời kỳ có thể tạo bằng Dreamina CLI (`D:\CLI\dreamina\dreamina-canvas.exe`, hoặc biến môi trường `DREAMINA_CLI`).
-1. Trong `asset-manifest.json`, thêm một mục `"kind": "texture"` có phần `generator`: `{ "tool": "dreamina", "model": "seedream_4.7", "resolution": "2K", "ratio": "16:9", "refs": ["../../skill/cartoon-3d-short/references/own/frames/f00020_q01.jpg"], "prompts": { "wall": "..." } }`.
+1. Trong `asset-manifest.json`, thêm một mục `"kind": "texture"` có phần `generator`: `{ "tool": "dreamina", "model": "seedream_4.7", "resolution": "2K", "ratio": "16:9", "refs": ["<ảnh mẫu phong cách, đường dẫn tính từ my-video>"], "prompts": { "wall": "..." } }`.
 2. `node scripts/food.mjs texture --episode <slug> --all`: lưu bản thiết kế lên canvas Dreamina riêng của tập và **chỉ báo giá** (miễn phí). Thêm `--dry-run` để xem câu lệnh mà không gọi Dreamina.
 3. Người dùng duyệt số credit, rồi chạy `... --run --credit-ceiling <số>`: tạo ảnh, tải về `public/<targetDir>/<tên>.png`, ghi nút, tài nguyên và credit thật vào `generator.runs`. Muốn làm lại một ảnh: `--id <id> --force`.
 4. Trong cảnh: `env.tex("<id>/<tên>", { repeat: [x, y] })` trả ảnh hoặc `null` (khi đó cảnh dùng màu vẽ tay). Cảnh `pastry` nhận sẵn `params.wallTex`.

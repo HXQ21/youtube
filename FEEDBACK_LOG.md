@@ -1,36 +1,8 @@
 # Sổ ghi lỗi người dùng phản ánh
 
-Mỗi lần người dùng báo một lỗi, Claude ghi thêm một mục vào đây: ngày, tập/bản, lỗi người dùng thấy, nguyên nhân, cách sửa, file đã sửa, cách kiểm tra và bài học cho các tập sau.
-Trước khi làm một tập mới hoặc xuất bản final, đọc phần **Bài học** để không lặp lại lỗi cũ.
+Sổ này ghi **từng lần** người dùng báo lỗi: ngày, tập, lỗi thấy, nguyên nhân, cách sửa, file, cách kiểm, trạng thái. Claude ghi ngay trong lượt người dùng báo.
 
-## Bài học (áp dụng cho mọi tập)
-
-1. Kịch bản không được nặng số liệu. Short tối đa một năm, một con số, một tên người; Long tối đa khoảng 6 năm đọc thành lời cả bài, còn lại để nhãn trên hình. Viết theo mẫu chung `skill/cartoon-3d-short/templates/STORY_STRUCTURE.md` (#1).
-2. Độ dài shot theo loại đoạn (#2, #6). Mở đầu gây tò mò: 1–3 giây. Kể sự kiện, nhân vật, hành trình: 2–4 giây, cắt khi chuyển ý, có hành động hoặc phản ứng. Thao tác và biến đổi món ăn: 3–6 giây, có thể lâu hơn khi người xem còn thấy quá trình tiến triển. Phản ứng hài hoặc chi tiết chèn nhanh: 1–2 giây. Mỗi shot ghi `pace` trong storyboard; lệnh `timeline` và `validate` cảnh báo shot lệch khung.
-3. Nhân vật 2D không được méo: không nghiêng máy khi có nhân vật, không nhìn sau lưng thẻ, người đi ngang dùng hình đi nghiêng (#3). Luật này chỉ bảo vệ thẻ nhân vật, không giới hạn cách kể bằng camera: góc thấp, POV, xuyên cảnh, bay trên không vẫn dùng được khi `camcheck` đạt (#17).
-4. Nhân vật đang làm việc phải dùng tay: nhào bột, cầm dụng cụ, đưa đồ. Không để tay buông khi cảnh nói về công việc đó (#4).
-5. Các khối 3D đặt sát nhau phải lệch hẳn ra (≥ 0,3 m) hoặc liền một khối; chi tiết nhô ra chỉ vài cm sẽ làm nét mực bị đứt (#5).
-6. Xem ảnh tĩnh ở kích thước thật, phóng to chỗ nối và viền, trước khi báo xong.
-7. Nhân vật của kênh là **người que 2D** (đầu tròn to, thân nhỏ đơn giản, tay chân là nét que). Mọi ảnh tham chiếu hay thiết kế nhân vật phải theo kiểu này, không vẽ người đầy đủ (#8).
-8. Ảnh Dreamina chỉ là **tham chiếu**. "Tạo nhân vật" mặc định là dựng nhân vật bằng code để dùng trong video; chỉ tạo ảnh Dreamina khi người dùng nói rõ cần ảnh, và luôn báo credit trước (#9).
-9. Video phải "sống" và dày chi tiết như kênh người dùng muốn đạt tới (#10). Món ăn là nhân vật chính, con người là câu chuyện. Theo `skill/cartoon-3d-short/templates/VISUAL_DENSITY.md`:
-   - Mỗi shot thấy rõ chủ thể; khoảng 60–70% shot có tay hoặc mặt người chỉ để tham khảo, không chen mặt người cho đủ tỷ lệ (thay mức 80% cũ, #21).
-   - Không có nửa giây nào đứng yên.
-   - 3–4 tông sáng theo thời kỳ của món, có vùng tối thật.
-   - Đồ vật và chữ trong cảnh kể chuyện.
-   - Câu mở có nhân vật làm điều lạ với món; kết bằng cú bất ngờ trong 1 giây sau từ cuối.
-   - Mỗi thao tác có tiếng.
-10. Khi người dùng muốn "giống một kênh" về màu hay hình, phải **đo trên toàn bộ khung** của kênh đó (2 fps), không suy từ vài khung mẫu; chỉnh rồi đo lại bằng cùng phép đo (#11).
-11. Mọi thay đổi về hình (màu, ánh sáng, nhân vật) phải áp cho **mọi đường render đang dùng**: bản mốc Blender (`film.mjs guide`) và clip Seedance; three.js chỉ còn tới khi xóa hẳn. Sau khi sửa, đo các đường cạnh nhau (#12, #21).
-12. Giới hạn và giá của dịch vụ ngoài (Dreamina...) phải ghi rõ lấy từ đâu (CLI hay web) và đủ cả min lẫn max; khi người dùng thấy khác trên web, đối chiếu cả hai (#13).
-13. Khi so màu hai bản render, đo **theo vùng** (cùng một vật ở cùng vị trí) và đo độ ấm, độ trải màu, không chỉ độ bão hòa trung bình: ám một màu có thể làm độ bão hòa tăng mà hình vẫn kém (#15).
-14. Đừng lặp nhiều vòng trên một shot thử rồi gửi từng vòng. Thử nhanh nội bộ, rồi đưa người dùng thứ thấy rõ khác biệt ở mức sản phẩm (cả video, trước/sau) (#16).
-15. Mỗi clip AI gắn với đúng một phiên bản của đoạn phim (khóa đoạn) và chỉ vào bản cuối khi người dùng đã duyệt; prompt AI chỉ nói chuyện hình, phần chữ và màu giai thoại để Remotion làm (#21).
-16. Góp ý có file đính kèm (docx, pdf, ảnh) thì đọc hết file trước khi áp, không dựa vào bản tóm tắt (#22).
-17. Khi chuyển một chức năng sang công cụ khác (three.js → Blender), liệt kê cả hành vi ngầm của công cụ cũ (máy tự trôi, rung theo sự kiện) và đo video ra (khung đứng yên) trước khi gửi người dùng xem (#23).
-18. Trước khi viết hoặc sửa prompt cho dịch vụ trả tiền, đọc lại bài học về dịch vụ đó trong bộ nhớ (`dreamina-cli.md`); thử 1–2 đoạn trước khi tạo cả loạt (#25).
-19. Đổi công cụ hay quy trình làm hình thì phải chứng minh trên một đoạn ngắn rằng bản mới **đẹp hơn bản đang có** (đặt cạnh nhau, người dùng xem) rồi mới chuyển cả tập (#26).
-20. Người dùng yêu cầu rõ một hướng thì làm đúng hướng đó; nếu thấy rủi ro, nói rủi ro một lần rồi làm, không tự đổi sang hướng mình thích. Khi chuyển công cụ, giữ một bảng "chức năng cũ → đã chuyển / chưa chuyển" có bằng chứng, và báo ngay khi một bảo đảm cũ bị mất (#27).
+Quy tắc rút ra cho mọi tập nằm ở `D:\AI repo\Youtube\skill\cartoon-3d-short\huong-dan\01-bai-hoc.md`, không nằm ở đây. Lỗi nào có thể lặp lại ở tập sau thì thêm một dòng vào file đó.
 
 ## Lỗi đã biết từ repo gốc (video cây cầu, mromidev/claude-animated-shorts)
 
