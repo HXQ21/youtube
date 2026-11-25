@@ -147,11 +147,29 @@ def render(path, sc=None):
     return sc.render.filepath
 
 
+def single(sc, px=1200):
+    """keep only the first cell (neutral face, front, full body) on the plain sheet colour, no labels: the Seedance
+    character reference. The BytePlus Seedance 2.0 prompt guide warns that multi-pose / multi-view sheets are read as
+    several people (duplicated characters, ID drift): one clean full-body image per character instead."""
+    for ob in list(sc.collection.all_objects):
+        if ob.name not in ("cast_0_0", "castCam"):
+            bpy.data.objects.remove(ob, do_unlink=True)
+    cx, cy, w, h = GX + CW * K / 2, GY + CH * K / 2 - 10, CW * K + 70, (CW * K + 70) * 1.5
+    cob = sc.objects["castCam"]
+    cob.data.ortho_scale = h * M_PER_PX                 # the larger (vertical) side of a 2:3 frame
+    x, z = px_to_world(cx, cy)
+    cob.location = (x, -10, z)
+    sc.render.resolution_x, sc.render.resolution_y = round(px * w / h), px
+    return sc
+
+
 if __name__ == "__main__":
     a = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     opt = {a[i][2:]: a[i + 1] for i in range(0, len(a) - 1) if a[i].startswith("--")}
     who, v = opt.get("who", "baker"), int(opt.get("v", 0))
     sc, _ = build(who, v)
+    if opt.get("single") == "1":
+        single(sc)
     if bpy.context.window is None:
         bpy.context.window_manager.windows  # background: render the CastSheet scene directly
     render(opt.get("out", os.path.join(HERE, "..", "out", "_cast_gp", f"{who}-v{v}.png")), sc)

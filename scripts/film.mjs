@@ -29,7 +29,9 @@ const SETS = path.join(ROOT, "blender", "sets");
 // character references for Seedance: the cast sheets of the people actually on screen in the segment (shot.py writes
 // guide/sNN/cast.json), drawn by the same code as the guides (blender/castsheet.py -> out/_cast_brand/<who>-v<v>.png).
 // No fixed sheet: the old brand turnaround shows the narrator, who is not in the films, and Seedance would add her.
-const CAST_SHEETS = path.join(ROOT, "out", "_cast_brand"), MAX_CAST_REFS = 3;
+// one clean full-body image per character (castsheet.py --single 1): the official Seedance guide warns that multi-pose
+// sheets read as several people (twins, ID drift); at most 3 people + the guide video + a style image = 4-5 assets
+const CAST_SHEETS = path.join(ROOT, "out", "_cast_brand", "single"), MAX_CAST_REFS = 3;
 const castRefs = (cast) => {
   const sheets = fs.existsSync(CAST_SHEETS) ? fs.readdirSync(CAST_SHEETS) : [], r = pickCastSheets(cast, sheets, MAX_CAST_REFS);
   return { refs: r.files.map((f) => path.join(CAST_SHEETS, f)), missing: r.missing };
@@ -103,8 +105,11 @@ const guide = () => {
       if (exposure?.warn?.length) console.log(`  CHÚ Ý ${g.id} (${light}): ${exposure.warn.join("; ")}`);
       const fc = path.join(fdir, "frame_check.json"), framingIssues = fs.existsSync(fc) ? readJson(fc) : [];
       if (framingIssues.length) console.log(`  CHÚ Ý ${g.id}: khung hình ${[...new Set(framingIssues.map((i) => `${i.what} (${i.name})`))].join("; ")}`);
+      // camera audit (blender/shot.py + camkit.py, the Blender camcheck): errors block a paid clip like a frozen guide
+      const ca = path.join(fdir, "camera_audit.json"), camIssues = fs.existsSync(ca) ? readJson(ca) : [];
+      if (camIssues.length) console.log(`  CHÚ Ý ${g.id}: máy quay ${camIssues.filter((x) => x.level === "error").length} lỗi, ${camIssues.filter((x) => x.level !== "error").length} cảnh báo (${[...new Set(camIssues.map((x) => `${x.code} ${x.who}`))].join("; ")})`);
       const castFile = path.join(fdir, "cast.json"), cast = fs.existsSync(castFile) ? readJson(castFile) : [];
-      writeJson(path.join(c.dir, "guide", `${g.id}.json`), { key: segmentKey(c.tl, g), set: setVersion(g.scene), cast, exposure, framing: framingIssues.length, frozenSec: +frozen.toFixed(2), quality: q, a: g.a, b: g.b, genSec: g.genSec, shots: g.shots, at: new Date().toISOString() });
+      writeJson(path.join(c.dir, "guide", `${g.id}.json`), { key: segmentKey(c.tl, g), set: setVersion(g.scene), cast, exposure, framing: framingIssues.length, camErrors: camIssues.filter((x) => x.level === "error").length, camWarnings: camIssues.filter((x) => x.level !== "error").length, frozenSec: +frozen.toFixed(2), quality: q, a: g.a, b: g.b, genSec: g.genSec, shots: g.shots, at: new Date().toISOString() });
     }
     console.log(`${g.id}: ${args.frames ? `khung ${args.frames}` : rel(out)} (${((Date.now() - t0) / 1000).toFixed(0)}s)`);
   }
@@ -129,7 +134,7 @@ const ai = () => {
     if (gm.quality === "draft" && args.run && !args["allow-draft-guide"]) console.log(`  chú ý: bản mốc ${g.id} là bản nháp (nửa kích thước); nên dựng --quality preview trước khi tạo`);
     if (done?.key === key && done.approved && !args.force) { console.log(`${g.id}: đã có clip được duyệt cho đúng đoạn này, bỏ qua`); continue; }
     const cr = castRefs(gm.cast);
-    if (cr.missing.length) throw new ConfigError(`Đoạn ${g.id} có nhân vật chưa có bảng mẫu: ${cr.missing.join(", ")}. Dựng bằng: blender -b --python blender/castsheet.py -- --who <tên> --v <số> --out out/_cast_brand/<tên>-v<số>.png`);
+    if (cr.missing.length) throw new ConfigError(`Đoạn ${g.id} có nhân vật chưa có bảng mẫu: ${cr.missing.join(", ")}. Dựng bằng: blender -b --python blender/castsheet.py -- --who <tên> --v <số> --single 1 --out out/_cast_brand/single/<tên>-v<số>.png`);
     // style target (#25): one picture of the look we want, so Seedance repaints instead of copying the plain guide
     let style = null;
     if (args.style === "auto") {
@@ -143,8 +148,12 @@ const ai = () => {
     } else if (args.style && args.style !== true) style = path.resolve(ROOT, String(args.style));
     if (style && !fs.existsSync(style)) throw new ConfigError(`Không thấy ảnh mẫu phong cách ${style}`);
     const ratio = c.tl.width > c.tl.height ? "16:9" : c.tl.width === c.tl.height ? "1:1" : "9:16";
+    // every reference is named inline where it is used ({{res:<id>}} = the asset mention), most important first
+    const tag = (f) => `{{res:${up(f)}}}`;
+    const refs = { video: tag(gv), chars: cr.refs.map((f) => ({ file: f, tag: tag(f) })), style: style ? tag(style) : null };
+    const prompt = aiPrompt(g, byId, c.tl.fps, refs);
     const gen = ["--project-id", st.projectId, "--model", model, "--mode", "m2v", "--ratio", ratio, "--resolution", "720p", "--duration", String(g.genSec),
-      "--ref", `res:${up(gv)}`, ...[...cr.refs, ...refsExtra, ...(style ? [style] : [])].flatMap((f) => ["--ref", `res:${up(f)}`]), "--prompt", aiPrompt(g, byId, c.tl.fps, cr.refs.length > 0, !!style)];
+      "--ref", `res:${up(gv)}`, ...[...cr.refs, ...refsExtra, ...(style ? [style] : [])].flatMap((f) => ["--ref", `res:${up(f)}`]), "--prompt", prompt];
     st.nodes ??= {};
     const nodeKey = `${g.id}|${model}`;
     const node = st.nodes[nodeKey] ? dm(["node", "edit", "video", "--node-id", st.nodes[nodeKey], ...gen]).node.nodeId : dm(["node", "create", "video", "--title", `${c.slug} ${g.id}`, "--x", "0", "--y", "0", ...gen]).node.nodeId;
@@ -181,7 +190,7 @@ const ai = () => {
       if (fs.existsSync(out.replace(/\.mp4$/, ".json"))) fs.renameSync(out.replace(/\.mp4$/, ".json"), `${dst}.json`);
     }
     dm(["resource", "download", r.resourceId, "--project-id", st.projectId, "-o", part]); fs.renameSync(part, out);
-    writeJson(out.replace(/\.mp4$/, ".json"), { key, guide: gm, prompt: aiPrompt(g, byId, c.tl.fps, cr.refs.length > 0, !!style), promptVersion: PROMPT_VERSION, style: style ? rel(style) : null, model, nodeId: node, credits: q.totalMaxCredits, approved: false, at: new Date().toISOString() });
+    writeJson(out.replace(/\.mp4$/, ".json"), { key, guide: gm, prompt, promptVersion: PROMPT_VERSION, style: style ? rel(style) : null, model, nodeId: node, credits: q.totalMaxCredits, approved: false, at: new Date().toISOString() });
     console.log(`  -> ${rel(out)} (chưa duyệt: xem rồi chạy film.mjs approve --segment ${g.id})`);
   }
   console.log(`Tổng báo giá ${segs.length} đoạn: ${total} credit.${args.run ? "" : ` Chưa tạo. Khi đã duyệt (cùng đoạn, mẫu, model, format như lúc báo giá): node scripts/film.mjs ai --episode ${c.slug} --format ${c.format}${args.segment ? ` --segment ${args.segment}` : ""} --model ${model}${args.refs ? ` --refs "${args.refs}"` : ""}${args.style ? ` --style ${args.style}` : ""} --run --credit-ceiling ${total}`}`);

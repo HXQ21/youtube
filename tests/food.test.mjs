@@ -325,7 +325,12 @@ test("film: AI segments never cross a location or a shot, stay <= 15 s, and shor
   assert.deepEqual(film.pickCastSheets([], ["baker-v0.png"]), { files: [], missing: [] });
   // the Seedance prompt comes from structured params, never the editor's note, and never asks for sepia or text
   const pr = film.aiPrompt(s2[0], Object.fromEntries(tl2.shots.map((x) => [x.id, x])));
-  assert.match(pr, /Vienna street/); assert.doesNotMatch(pr, /note v/); assert.match(pr, /no sepia/); assert.match(pr, /ink outlines/); assert.match(pr, /first 2\.0 s/);
-  assert.match(pr, /^Repaint this shot/); assert.doesNotMatch(pr, /exactly|every object's position/); assert.doesNotMatch(pr, /character sheets/);
-  assert.match(film.aiPrompt(s2[0], Object.fromEntries(tl2.shots.map((x) => [x.id, x])), 30, true, true), /character sheets give.*style target/);
+  // v3 (official BytePlus guide): omni-reference wording, never edit wording; no seconds; references named inline
+  assert.match(pr, /Vienna street/); assert.doesNotMatch(pr, /note v/); assert.match(pr, /ink outlines/); assert.doesNotMatch(pr, /sepia/);
+  assert.match(pr, /^Refer to the camera movement.* in Video 1 to generate a new/); assert.doesNotMatch(pr, /Repaint|exactly|every object's position/);
+  assert.doesNotMatch(pr, /\d+(\.\d+)? ?s/); assert.match(pr, /calm, slow hold/); assert.match(pr, /subtitle-free/); assert.match(pr, /twin/);
+  const pr2 = film.aiPrompt(s2[0], Object.fromEntries(tl2.shots.map((x) => [x.id, x])), 30,
+    { video: "{{res:v}}", chars: [{ file: "x/officer-v1.png", tag: "{{res:o}}" }], style: "{{res:s}}" });
+  assert.match(pr2, /in \{\{res:v\}\} to generate/); assert.match(pr2, /Define a man in a black top hat.* in \{\{res:o\}\} as the officer\./);
+  assert.match(pr2, /Use \{\{res:s\}\} as the visual style reference/);
 });
