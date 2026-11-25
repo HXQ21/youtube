@@ -1,4 +1,4 @@
-// Remotion entry: registers FoodEpisode, FoodAssembly, CastSheet and BridgeShort (src/Root.tsx).
+// Remotion entry: registers FoodEpisode, FoodAssembly and CastSheet (src/Root.tsx).
 
 
 import { registerRoot } from "remotion";

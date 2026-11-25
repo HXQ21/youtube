@@ -1,5 +1,4 @@
 import { Composition } from "remotion";
-import { BridgeShort, BRIDGE_FRAMES } from "./videos/bridge/Bridge";
 import { FoodEpisode, calcEpisode, EpisodeProps } from "./core/Episode";
 import type { Timeline } from "./core/types";
 import { CastSheet, CastProps } from "./core/CastSheet";
@@ -25,8 +24,6 @@ export const RemotionRoot: React.FC = () => {
         defaultProps={{ timeline: SAMPLE as unknown as AssemblyProps["timeline"], pictures: [], mode: "preview" } as AssemblyProps} />
       {/* character sheet drawn by the episode character code (scripts/cast-sheet.mjs) */}
       <Composition id="CastSheet" component={CastSheet} durationInFrames={1} fps={30} width={1920} height={1080} defaultProps={{ who: "chef", v: 0 } as CastProps} />
-      {/* the original bridge short, kept as the style reference */}
-      <Composition id="BridgeShort" component={BridgeShort} durationInFrames={BRIDGE_FRAMES} fps={30} width={1080} height={1920} />
     </>
   );
 };
