@@ -17,10 +17,11 @@ import bpy
 from mathutils import Vector, Quaternion
 from bpy_extras.object_utils import world_to_camera_view
 sys.path.insert(0, HERE)
-from people import pose_key
+from people import pose_key, SIZE, build_of
 # Blender 5.3's F12/background Eevee draws live Grease Pencil over every mesh, so each pose is baked once to a cached
 # transparent PNG (kit.card_png) and shown on an upright lit card plane that occludes and casts shadows.
 from kit import card_png, card_mat, CARD_X, CARD_Z0, CARD_Z1
+import camkit   # camera intelligence ported from three.js: level horizon, fit subjects, audit (#27)
 
 
 def log(*a):
@@ -59,6 +60,16 @@ class Cast:
         self.root = bpy.data.objects.new(f"CAST-{cid}", None)
         coll.objects.link(self.root)
         self.cards, self.shown = {}, {}       # pose key -> plane; frame -> pose key (None = off screen)
+        self.tops = {}                        # pose key -> top of the drawing above the feet (m): hats, raised hands
+        self.crown, self.head = SIZE.get(build_of(who, v), SIZE["adult"])
+
+    def top(self, fr):
+        """highest drawn point of this frame's card (a toque or raised hands reach above the head)"""
+        return max(self.crown, self.tops.get(self.shown.get(fr), self.crown))
+
+    def check_points(self, fr):
+        """(feet, face, top) heights the framing checks use for this frame"""
+        return 0.0, self.head, self.top(fr)
 
     def card(self, key, f, o):
         if key in self.cards:
@@ -70,6 +81,7 @@ class Cast:
         for li, c in zip(me.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
             uv.data[li.index].uv = c
         me.materials.append(card_mat(path))
+        self.tops[key] = card_top(path)
         ob = bpy.data.objects.new(me.name, me)
         self.coll.objects.link(ob)
         ob.parent = self.root
@@ -101,6 +113,17 @@ class Cast:
                 ob.hide_render = ob.hide_viewport = k != key
                 ob.keyframe_insert("hide_render", frame=fr)
                 ob.keyframe_insert("hide_viewport", frame=fr)
+
+
+def card_top(path):
+    """height above the feet of the highest opaque pixel of a card PNG (card frame CARD_Z0..CARD_Z1)"""
+    import numpy as np
+    img = bpy.data.images.load(path, check_existing=True)
+    w, h = img.size
+    px = np.empty(w * h * 4, dtype=np.float32)
+    img.pixels.foreach_get(px)
+    rows = np.where(px.reshape(h, w, 4)[:, :, 3].max(axis=1) > 0.5)[0]       # row 0 is the bottom in Blender
+    return CARD_Z0 + (rows.max() + 1) / h * (CARD_Z1 - CARD_Z0) if len(rows) else CARD_Z1
 
 
 def framing(sc, cam, people, frames, out):
@@ -137,8 +160,9 @@ def framing(sc, cam, people, frames, out):
             if key is None:
                 continue
             base = c.root.matrix_world.translation
-            face = world_to_camera_view(sc, cam, base + Vector((0, 0, 1.44)))      # head centre (people.SIZE, adult)
-            crown = world_to_camera_view(sc, cam, base + Vector((0, 0, 1.68)))
+            _feet, head_h, top_h = c.check_points(fr)
+            face = world_to_camera_view(sc, cam, base + Vector((0, 0, head_h)))    # head centre for this build
+            crown = world_to_camera_view(sc, cam, base + Vector((0, 0, top_h)))     # top of the drawing (hat included)
             on = face.z > 0 and 0.0 <= face.x <= 1.0 and 0.0 <= face.y <= 1.0
             if on and crown.y > 1.0:
                 issues.append({"fr": fr, "what": "đầu nhân vật bị cắt ở mép trên", "name": c.cid, "out": round(crown.y - 1.0, 2)})
@@ -146,6 +170,104 @@ def framing(sc, cam, people, frames, out):
                 issues.append({"fr": fr, "what": "mặt nhân vật lọt ở mép khung", "name": c.cid, "out": round(min(abs(face.x), abs(face.x - 1)), 2)})
     json.dump(issues, open(os.path.join(out, "frame_check.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     return issues
+
+
+def fit_shots(sc, rc, people, frame_shot):
+    """three.js frame() guaranteed the subject fits; hand-placed Blender cameras do not. Per shot, dolly the camera
+    back along its own view axis by the smallest factor (up to camkit.FIT_MAX) that keeps every SUBJ- object and every
+    visible character's head inside the safe frame on sampled frames; the cards are turned to the new camera.
+    Returns {shot id: factor (1.0 = untouched) or None (could not fit)}."""
+    view = bpy.context.view_layer
+    tagged = [ob for ob in sc.objects if ob.type == "MESH" and (ob.name.startswith("SUBJ-") or ob.get("subject"))]
+    by_shot = {}
+    for fr, sid in sorted(frame_shot.items()):
+        by_shot.setdefault(sid, []).append(fr)
+    def state(fr):
+        sc.frame_set(fr)
+        q = rc.rotation_quaternion.copy()
+        return rc.location.copy(), q @ Vector((0.0, 0.0, -1.0)), (rc.data.dof.focus_distance if rc.data.dof.focus_distance > 0.05 else 3.0)
+    def ok_at(fr, f):
+        loc, fwd, dist = state(fr)
+        rc.location = loc - fwd * dist * (f - 1.0)
+        view.update()
+        subs = [ob for ob in tagged if not ob.hide_render and min(ob.matrix_world.to_scale()) > 1e-3]
+        ppl = [(c.root.matrix_world.translation.copy(), c.cid, c.head, c.top(fr)) for c in people.values() if c.shown.get(fr) is not None]
+        return camkit.subjects_ok(sc, rc, subs, ppl)
+    out = {}
+    for sid, frs in by_shot.items():
+        sample = sorted(set(frs[::4] + [frs[-1]]))
+        steps = [1.0 + 0.08 * i for i in range(int((camkit.FIT_MAX - 1.0) / 0.08) + 1)]
+        f = next((x for x in steps if all(ok_at(fr, x) for fr in sample)), None)
+        out[sid] = f
+        if not f or f <= 1.0:
+            continue
+        for fr in frs:
+            loc, fwd, dist = state(fr)
+            rc.location = loc - fwd * dist * (f - 1.0)
+            rc.keyframe_insert("location", frame=fr)
+            rc.data.dof.focus_distance = dist * f
+            rc.data.keyframe_insert("dof.focus_distance", frame=fr)
+            view.update()
+            for c in people.values():
+                if c.shown.get(fr) is None:
+                    continue
+                d = rc.location - c.root.location
+                c.root.rotation_euler = (0.0, 0.0, math.atan2(d.x, -d.y))
+                c.root.keyframe_insert("rotation_euler", frame=fr)
+    return out
+
+
+def audit(sc, rc, people, frame_shot, frame_cam, out):
+    """camcheck for Blender (src/core/direct.ts RULES): elevation over a visible character's head (warn past 12
+    degrees, 18 for drama set-ups, error past 20), a big card near the frame edge under a wide lens (DISTORT), and a
+    camera that jumps between two frames of the same shot (CAM_JUMP). Writes camera_audit.json."""
+    rows, prev = [], None
+    for fr in sorted(frame_shot):
+        sc.frame_set(fr)
+        pos, fwd = rc.matrix_world.translation.copy(), (rc.matrix_world.to_quaternion() @ Vector((0.0, 0.0, -1.0)))
+        if prev and prev[0] == frame_shot[fr]:
+            ang = math.degrees(prev[1].angle(fwd, 0.0))
+            if ang > camkit.JUMP_DEG:
+                rows.append({"fr": fr, "level": "warn", "code": "CAM_JUMP", "who": frame_shot[fr], "value": round(ang, 1)})
+        prev = (frame_shot[fr], fwd)
+        chars, drama = frame_cam.get(fr, (True, False))
+        if not chars:
+            continue
+        limit = camkit.PITCH_DRAMA if drama else camkit.PITCH_WARN
+        for c in people.values():
+            if c.shown.get(fr) is None:
+                continue
+            base = c.root.matrix_world.translation
+            face = world_to_camera_view(sc, rc, base + Vector((0.0, 0.0, c.head)))
+            if face.z <= 0 or not (0.0 <= face.x <= 1.0 and 0.0 <= face.y <= 1.0):
+                continue
+            p = camkit.pitch_deg(pos, base, c.head)
+            if abs(p) > camkit.PITCH_ERR:
+                rows.append({"fr": fr, "level": "error", "code": "PITCH", "who": c.cid, "value": round(p, 1)})
+            elif abs(p) > limit:
+                rows.append({"fr": fr, "level": "warn", "code": "PITCH", "who": c.cid, "value": round(p, 1)})
+            # OCCLUDED: something stands between the lens and the face (three.js camcheck OCCLUDED)
+            head_w = base + Vector((0.0, 0.0, c.head))
+            ray = head_w - pos
+            hit, _loc, _n, _i, hob, _m = sc.ray_cast(bpy.context.evaluated_depsgraph_get(), pos, ray.normalized(), distance=max(0.0, ray.length - 0.15))
+            if hit and hob is not None and not (hob.parent and hob.parent.name.startswith("CAST-")):   # people in front of people are fine
+                rows.append({"fr": fr, "level": "warn", "code": "OCCLUDED", "who": c.cid, "value": hob.name})
+            # MIN_DIST: a flat card closer than 0.6 m to the lens reads as a cardboard cut-out
+            if ray.length < camkit.MIN_DIST:
+                rows.append({"fr": fr, "level": "warn", "code": "MIN_DIST", "who": c.cid, "value": round(ray.length, 2)})
+            feet = world_to_camera_view(sc, rc, base)
+            crown = world_to_camera_view(sc, rc, base + Vector((0.0, 0.0, c.top(fr))))
+            if crown.y - feet.y > 0.5 and camkit.vfov(rc) > camkit.EDGE_FOV and (face.x < 0.12 or face.x > 0.88):
+                rows.append({"fr": fr, "level": "warn", "code": "DISTORT", "who": c.cid, "value": round(face.x, 2)})
+    # one row per (code, who, shot) keeps the report readable
+    seen, uniq = set(), []
+    for r in rows:
+        k = (r["code"], r["who"], frame_shot.get(r["fr"]))
+        if k not in seen:
+            seen.add(k)
+            uniq.append(r)
+    json.dump(uniq, open(os.path.join(out, "camera_audit.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    return uniq
 
 
 def main():
@@ -189,6 +311,7 @@ def main():
     if mod:
         for cid, who, v in getattr(mod, "CAST", []):
             people[cid] = Cast(cid, who, v, coll)
+    frame_shot, frame_cam = {}, {}
     for f in range(a, b):
         s = next((x for x in shots if x["a"] <= f < x["b"]), shots[-1])     # past the story: hold the last shot
         lf, dur = f - s["a"], (s["b"] - s["a"]) / fps
@@ -205,6 +328,10 @@ def main():
         lb, qb, _ = B.matrix_world.decompose()
         rc.location = la.lerp(lb, k)
         rc.rotation_quaternion = qa_.slerp(qb, k)
+        if people and A.get("chars", True):
+            rc.rotation_quaternion = camkit.level(rc.rotation_quaternion)     # flat cards: never a rolled camera
+        frame_shot[fr] = s["id"]
+        frame_cam[fr] = (bool(A.get("chars", True)), bool(A.get("drama", False) or B.get("drama", False)))
         if A is B and not s.get("static"):
             # one camera and no CAM-<name>End: a slow push-in and sideways drift so the shot is never a frozen frame
             # (like three.js stage.ts drift; here 8 % toward the subject, 3 % sideways). The CAM's custom props push/side tune it.
@@ -251,6 +378,17 @@ def main():
     samples, pct = {"draft": (8, 50), "preview": (16, 100), "final": (32, 100)}.get(quality, (8, 50))
     sc.eevee.taa_render_samples = samples
     sc.render.resolution_x, sc.render.resolution_y, sc.render.resolution_percentage = tl["width"], tl["height"], pct
+    if o.get("nofit") != "1":
+        fits = fit_shots(sc, rc, people, frame_shot)
+        for sid, f in fits.items():
+            if f is None:
+                log(f"CHÚ Ý khung hình: shot {sid}: lùi máy tới {camkit.FIT_MAX:.1f} lần vẫn chưa giữ được món hoặc đầu nhân vật trong khung; sửa máy trong bối cảnh")
+            elif f > 1.0:
+                log(f"shot {sid}: máy lùi {f:.2f} lần để giữ món và đầu nhân vật trong khung")
+    aud = audit(sc, rc, people, frame_shot, frame_cam, out)
+    errs = [x for x in aud if x["level"] == "error"]
+    if aud:
+        log(f"CHÚ Ý máy quay: {len(errs)} lỗi, {len(aud) - len(errs)} cảnh báo: " + "; ".join(sorted({f'{x["code"]} {x["who"]}' for x in aud})[:6]))
     sc.render.fps = fps
     sc.frame_start, sc.frame_end = a - seg["a"] + 1, b - seg["a"]
     sc.render.image_settings.file_format = "PNG"
