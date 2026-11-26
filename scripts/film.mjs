@@ -1,7 +1,10 @@
-// The film after three.js (2026-11-24): Blender lays out each stretch, Seedance 2.0 Mini paints it, Remotion assembles.
+// The film after three.js: Blender renders each stretch (2026-11-26: the user dropped Seedance, "loại bỏ seedance sử
+// dụng blender cho các khâu kết hợp remotion"; --quality final adds the channel look, blender/look.py), Remotion assembles.
 //   node scripts/film.mjs segments --episode <slug> [--format short]          cut the timeline into AI segments (<= 15 s, one location each)
-//   node scripts/film.mjs guide    --episode <slug> [--segment s01] [--quality draft|preview] [--frames a-b]
-//                                   Blender layout render of each segment from blender/sets/<scene>.blend -> out/<slug>/<format>/guide/sNN.mp4
+//   node scripts/film.mjs guide    --episode <slug> [--segment s01] [--quality draft|preview|final] [--look ink|toon|none] [--frames a-b]
+//                                   Blender render of each segment from blender/sets/<scene>.blend -> out/<slug>/<format>/guide/sNN.mp4
+//                                   final = the picture of the film (ink lines on the set; --look toon adds cel bands)
+// Retired 2026-11-26 (kept, not in the flow): ai / approve, Seedance 2.0 Mini on Dreamina.
 //   node scripts/film.mjs ai       --episode <slug> [--segment s01]         quote every segment on Dreamina (no credits spent)
 //   node scripts/film.mjs ai       --episode <slug> --segment s01 --run --credit-ceiling N    generate after the user approved N credits
 //        [--style auto|<image>]  a style target image (auto: a frame of the old three.js final at the segment's middle; only segments with no characters and no legend)
@@ -9,13 +12,13 @@
 //   node scripts/film.mjs assemble --episode <slug> [--quality preview|final]  clips + 2D layer -> silent mp4 (then food.mjs mix, mux, qa)
 // Credits: only `ai --run` spends them, never above --credit-ceiling, and only after a quote the user approved.
 // Every guide/sNN.mp4 and ai/sNN.mp4 has a sidecar .json with the segment key (shots, camera, params and timed events of
-// that stretch). A clip whose key differs from the current timeline is stale and never used. Final takes only
-// approved Seedance clips; preview falls back to the matching guide.
+// that stretch). A clip whose key differs from the current timeline is stale and never used. Final takes only guides
+// rendered at --quality final; preview takes any matching guide.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { ROOT, PRESETS, ConfigError, loadEpisode, outDir, readJson, writeJson } from "./lib/config.mjs";
 import { resolveSlug } from "./lib/pipeline.mjs";
 import { planSegments, picturesFor, aiPrompt, segmentKey, chooseClip, pickCastSheets, PROMPT_VERSION } from "./lib/film.mjs";
@@ -41,7 +44,7 @@ const castRefs = (cast) => {
  *  made from the old guide are flagged for another look (the cut is the same, the picture may not be) */
 const setVersion = (scene) => {
   const h = crypto.createHash("sha1");
-  for (const f of [path.join(SETS, `${scene}.blend`), path.join(SETS, `${scene}.py`), path.join(ROOT, "blender", "shot.py")]) if (fs.existsSync(f)) h.update(fs.readFileSync(f));
+  for (const f of [path.join(SETS, `${scene}.blend`), path.join(SETS, `${scene}.py`), path.join(ROOT, "blender", "shot.py"), path.join(ROOT, "blender", "look.py")]) if (fs.existsSync(f)) h.update(fs.readFileSync(f));
   return h.digest("hex").slice(0, 12);
 };
 const probeSec = (f) => { const r = spawnSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", f], { encoding: "utf8" }); return Number(r.stdout.trim()) || 0; };
@@ -75,7 +78,19 @@ const segments = () => {
 };
 
 // ------------------------------------------------------------------ guide: Blender layout render
-const guide = () => {
+/** run Blender and keep only the lines worth showing: Freestyle prints millions of "degenerated triangle" warnings
+ *  (515 MB for s01 at final, 2026-11-26), which overflowed spawnSync's buffer and killed the render */
+const runBlender = (exe, argv) => new Promise((resolve) => {
+  const p = spawn(exe, argv, { stdio: ["ignore", "pipe", "pipe"] }), keep = [];
+  for (const st of [p.stdout, p.stderr]) {
+    let rest = "";
+    st.setEncoding("utf8");
+    st.on("data", (d) => { const ls = (rest + d).split(/\r?\n/); rest = ls.pop(); for (const l of ls) if (/^\[(shot|look)\]|Error|Traceback|  File/.test(l)) keep.push(l); });
+  }
+  p.on("close", (status) => resolve({ status, lines: keep }));
+});
+
+const guide = async () => {
   const c = ctx(), exe = findBlender(args.blender);
   if (!exe) throw new ConfigError("Chưa tìm thấy Blender (--blender <đường dẫn> hoặc BLENDER_EXE)");
   const q = String(args.quality ?? "draft");
@@ -84,11 +99,13 @@ const guide = () => {
     if (!fs.existsSync(set)) throw new ConfigError(`Chưa có bối cảnh ${rel(set)} cho đoạn ${g.id} (dựng qua Blender MCP theo quy ước CAM-/MARK-)`);
     const fdir = path.join(c.dir, "guide", g.id), out = path.join(c.dir, "guide", `${g.id}.mp4`);
     fs.rmSync(fdir, { recursive: true, force: true }); fs.mkdirSync(fdir, { recursive: true });
-    const extra = args.frames ? ["--frames", String(args.frames)] : [];
+    const extra = [...(args.frames ? ["--frames", String(args.frames)] : []), ...(args.look ? ["--look", String(args.look)] : [])];
+    // the 4 s padding was for Seedance's minimum clip; a final render stops where the segment stops
+    const gseg = q === "final" ? { ...g, genSec: g.sec } : g;
     const t0 = Date.now();
-    const r = spawnSync(exe, ["-b", set, "--python-exit-code", "1", "--python", path.join(ROOT, "blender", "shot.py"), "--",
-      "--timeline", c.tf, "--segment", JSON.stringify(g), "--out", fdir, "--quality", q, ...extra], { encoding: "utf8", maxBuffer: 1 << 28 });
-    for (const l of `${r.stdout}\n${r.stderr}`.split(/\r?\n/)) if (/^\[shot\]|Error|Traceback|  File/.test(l)) console.log("  " + l);
+    const r = await runBlender(exe, ["-b", set, "--python-exit-code", "1", "--python", path.join(ROOT, "blender", "shot.py"), "--",
+      "--timeline", c.tf, "--segment", JSON.stringify(gseg), "--out", fdir, "--quality", q, ...extra]);
+    for (const l of r.lines) console.log("  " + l);
     if (r.status !== 0) throw new Error(`Blender lỗi ở đoạn ${g.id} (mã ${r.status})`);
     if (!args.frames) {
       const ff = spawnSync("ffmpeg", ["-y", "-hide_banner", "-loglevel", "error", "-framerate", String(c.tl.fps), "-i", path.join(fdir, "f%04d.png"), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", out]);
@@ -109,7 +126,7 @@ const guide = () => {
       const ca = path.join(fdir, "camera_audit.json"), camIssues = fs.existsSync(ca) ? readJson(ca) : [];
       if (camIssues.length) console.log(`  CHÚ Ý ${g.id}: máy quay ${camIssues.filter((x) => x.level === "error").length} lỗi, ${camIssues.filter((x) => x.level !== "error").length} cảnh báo (${[...new Set(camIssues.map((x) => `${x.code} ${x.who}`))].join("; ")})`);
       const castFile = path.join(fdir, "cast.json"), cast = fs.existsSync(castFile) ? readJson(castFile) : [];
-      writeJson(path.join(c.dir, "guide", `${g.id}.json`), { key: segmentKey(c.tl, g), set: setVersion(g.scene), cast, exposure, framing: framingIssues.length, camErrors: camIssues.filter((x) => x.level === "error").length, camWarnings: camIssues.filter((x) => x.level !== "error").length, frozenSec: +frozen.toFixed(2), quality: q, a: g.a, b: g.b, genSec: g.genSec, shots: g.shots, at: new Date().toISOString() });
+      writeJson(path.join(c.dir, "guide", `${g.id}.json`), { key: segmentKey(c.tl, g), set: setVersion(g.scene), cast, exposure, framing: framingIssues.length, camErrors: camIssues.filter((x) => x.level === "error").length, camWarnings: camIssues.filter((x) => x.level !== "error").length, frozenSec: +frozen.toFixed(2), quality: q, look: String(args.look ?? (q === "final" ? "ink" : "none")), a: g.a, b: g.b, genSec: g.genSec, shots: g.shots, at: new Date().toISOString() });
     }
     console.log(`${g.id}: ${args.frames ? `khung ${args.frames}` : rel(out)} (${((Date.now() - t0) / 1000).toFixed(0)}s)`);
   }
@@ -229,7 +246,7 @@ const assemble = async () => {
   });
   if (stale.length) console.log(`Bỏ qua clip cũ (làm cho bản cắt trước): ${[...new Set(stale)].join(", ")}`);
   const missing = segs.filter((_, i) => !pics[i]).map((g) => g.id);
-  if (missing.length && final) throw new ConfigError(`Bản final chỉ dùng clip Seedance đã duyệt cho đúng đoạn. Còn thiếu: ${missing.join(", ")} (ai --run rồi approve).`);
+  if (missing.length && final) throw new ConfigError(`Bản final chỉ dùng hình Blender dựng ở --quality final cho đúng đoạn. Còn thiếu: ${missing.join(", ")} (film.mjs guide --segment <đoạn> --quality final).`);
   if (missing.length && !args["allow-gaps"]) throw new ConfigError(`Chưa có hình cho đoạn ${missing.join(", ")} (cần ai/ hoặc guide/ khớp timeline). Thêm --allow-gaps để dựng bản nháp có chỗ trống.`);
   const pub = path.join(ROOT, "public", "_film", c.slug, c.format);
   fs.rmSync(pub, { recursive: true, force: true }); fs.mkdirSync(pub, { recursive: true });
@@ -246,12 +263,12 @@ const assemble = async () => {
   // what this video is made of, read by food.mjs mux/qa: the source, the timeline it matches, the clip per segment
   writeJson(out.replace(/\.mp4$/, ".json"), { source: "film", quality: q, fingerprint: c.tl.fingerprint, at: new Date().toISOString(),
     segments: pics.map((p, i) => ({ id: segs[i].id, kind: p?.kind ?? null, approved: !!p?.approved, key: segmentKey(c.tl, segs[i]) })) });
-  console.log(`${rel(out)}: ${pictures.filter((p) => p.kind === "ai").length} đoạn Seedance, ${pictures.filter((p) => p.kind === "guide").length} đoạn bản mốc. Tiếp: food.mjs mix, mux, qa.`);
+  console.log(`${rel(out)}: ${pictures.filter((p) => p.kind === "blender").length} đoạn Blender final, ${pictures.filter((p) => p.kind === "guide").length} đoạn bản mốc. Tiếp: food.mjs mix, mux, qa.`);
 };
 
 try {
   if (cmd === "segments") segments();
-  else if (cmd === "guide") guide();
+  else if (cmd === "guide") await guide();
   else if (cmd === "ai") ai();
   else if (cmd === "approve") approve();
   else if (cmd === "assemble") await assemble();

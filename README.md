@@ -10,7 +10,7 @@ Mỗi tập có hai bản dùng chung nghiên cứu và asset:
 | Khung hình mặc định | 9:16, 1080x1920 | 16:9, 1920x1080 |
 | fps | 30 | 30 |
 
-Thời lượng, tỷ lệ, kích thước, phụ đề và nhãn đều đổi được cho từng tập hoặc từng lần chạy. Tập mẫu: `episodes/croissant`.
+Thời lượng, tỷ lệ, kích thước, phụ đề và nhãn đều đổi được cho từng tập hoặc từng lần chạy. Chưa có tập nào: mọi tập, video và bối cảnh Blender đã xóa ngày 2026-11-26, chỉ giữ phần khung. Dữ liệu mẫu cho test nằm ở `tests/fixtures/croissant`.
 
 Thư mục `src/videos/bridge` chỉ còn các module hình dùng chung (nét mực, nhòe ống kính, chỉnh màu, tô hai tông, ánh sáng, nhân vật); phần riêng của video cây cầu đã bỏ ngày 2026-11-25. Quy tắc của kênh chỉ nằm trong `skill/cartoon-3d-short/huong-dan/`.
 
@@ -134,7 +134,7 @@ Lệnh đối chiếu `asset-manifest.json` với file trong `public/assets/...`
 Ảnh kiểm tra một cảnh ở cả hai tỷ lệ:
 
 ```bash
-node scripts/scene-still.mjs --scene siege --legend --aspect 9:16,16:9 --assets episodes/croissant/asset-manifest.json
+node scripts/scene-still.mjs --scene siege --legend --aspect 9:16,16:9 --assets episodes/<món>/asset-manifest.json
 ```
 
 ## 8. Thêm một món mới

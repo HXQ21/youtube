@@ -351,12 +351,12 @@ const commands = {
     const [slug, format] = slugFmt(), ep = loadEpisode(slug, format, cliRender()), q = args.quality ?? "preview", dir = outDir(slug, format);
     const video = path.join(dir, `${name(ep, q)}.silent.mp4`), mix = path.join(ep.p.audioDir, "mix.wav"), out = path.join(dir, `${name(ep, q)}.mp4`);
     for (const f of [video, mix]) if (!fs.existsSync(f)) throw new ConfigError(`Thiếu ${rel(f)} (chạy render / mix trước).`);
-    // the silent video says what made it (film.mjs assemble = Blender/Seedance, render = three.js) and for which timeline
+    // the silent video says what made it (film.mjs assemble = Blender, render = three.js) and for which timeline
     const made = fs.existsSync(video.replace(/\.mp4$/, ".json")) ? readJson(video.replace(/\.mp4$/, ".json")) : null, tlNow = readJson(tlFile(ep));
     if (!made) console.log(`CHÚ Ý: ${rel(video)} không ghi nguồn (bản dựng trước 2026-11-24); không kiểm được nó khớp timeline hiện tại.`);
     else {
       if (made.fingerprint !== tlNow.fingerprint) throw new ConfigError(`${rel(video)} được dựng cho timeline cũ (${made.fingerprint} ≠ ${tlNow.fingerprint}): dựng lại hình (${made.source === "film" ? "film.mjs assemble" : "render"}) trước khi ghép tiếng.`);
-      console.log(`Hình: ${made.source === "film" ? `film.mjs assemble (${(made.segments ?? []).filter((s) => s.kind === "ai").length} đoạn Seedance, ${(made.segments ?? []).filter((s) => s.kind === "guide").length} đoạn bản mốc)` : "three.js render"}.`);
+      console.log(`Hình: ${made.source === "film" ? `film.mjs assemble (${(made.segments ?? []).filter((s) => s.kind === "blender").length} đoạn Blender final, ${(made.segments ?? []).filter((s) => s.kind === "guide").length} đoạn bản mốc)` : "three.js render"}.`);
     }
     const dv = probeDuration(video), da = probeDuration(mix);
     if (Math.abs(dv - da) > 0.25) throw new ConfigError(`Hình ${dv.toFixed(2)}s và tiếng ${da.toFixed(2)}s lệch nhau > 0.25s: mix hoặc render đang cũ so với timeline. Chạy lại bước cũ hơn.`);

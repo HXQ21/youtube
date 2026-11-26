@@ -1,0 +1,151 @@
+{
+ "assets": [
+  {
+   "id": "kenney-fantasy-town",
+   "name": "Fantasy Town Kit 2.0",
+   "author": "Kenney (kenney.nl)",
+   "sourceUrl": "https://kenney.nl/assets/fantasy-town-kit",
+   "license": "Creative Commons CC0 (public domain); commercial use allowed",
+   "attribution": "Not required. Optional credit: 'Kenney'",
+   "price": "free",
+   "formats": "GLB (folder 'Models/GLB format' in the zip, with Textures/colormap.png)",
+   "required": true,
+   "usedIn": [
+    "scene street (lanterns, cart, market stall, fountain)"
+   ],
+   "targetDir": "assets/shared/kenney-fantasy-town",
+   "files": {
+    "lantern": "assets/shared/kenney-fantasy-town/lantern.glb",
+    "cart": "assets/shared/kenney-fantasy-town/cart.glb",
+    "stall-green": "assets/shared/kenney-fantasy-town/stall-green.glb",
+    "fountain-round": "assets/shared/kenney-fantasy-town/fountain-round.glb"
+   },
+   "status": "validated",
+   "checkedOn": "2026-11-16"
+  },
+  {
+   "id": "kenney-nature",
+   "name": "Nature Kit 1.0",
+   "author": "Kenney (kenney.nl)",
+   "sourceUrl": "https://kenney.nl/assets/nature-kit",
+   "license": "Creative Commons CC0 (public domain); commercial use allowed",
+   "attribution": "Not required. Optional credit: 'Kenney'",
+   "price": "free",
+   "formats": "GLB (folder 'Models/GLTF format' in the zip)",
+   "required": true,
+   "usedIn": [
+    "scene siege (tents, campfire)"
+   ],
+   "targetDir": "assets/shared/kenney-nature",
+   "files": {
+    "tent_detailedOpen": "assets/shared/kenney-nature/tent_detailedOpen.glb",
+    "tent_smallOpen": "assets/shared/kenney-nature/tent_smallOpen.glb",
+    "campfire_logs": "assets/shared/kenney-nature/campfire_logs.glb"
+   },
+   "status": "validated",
+   "checkedOn": "2026-11-16"
+  },
+  {
+   "id": "kenney-castle-kit",
+   "name": "Castle Kit 2.0",
+   "author": "Kenney (kenney.nl)",
+   "sourceUrl": "https://kenney.nl/assets/castle-kit",
+   "license": "Creative Commons CC0 (public domain); commercial use allowed",
+   "attribution": "Not required. Optional credit: 'Kenney'",
+   "price": "free",
+   "formats": "not stated on the page (other Kenney 2.0 kits ship GLB, FBX and OBJ); model file names unknown until downloaded",
+   "required": true,
+   "usedIn": [
+    "scene siege: city wall and towers behind the camp (Long, chapter 3)"
+   ],
+   "targetDir": "assets/shared/kenney-castle-kit",
+   "files": {
+    "wall": null,
+    "tower": null
+   },
+   "status": "missing",
+   "checkedOn": "2026-11-16",
+   "note": "'wall' and 'tower' are logical names. After download the real file names are mapped here (the user does not rename anything)."
+  },
+  {
+   "id": "kenney-factory-kit",
+   "name": "Factory Kit 3.0 (page URL slug: conveyor-kit)",
+   "author": "Kenney (kenney.nl)",
+   "sourceUrl": "https://kenney.nl/assets/conveyor-kit",
+   "license": "Creative Commons CC0 (public domain); commercial use allowed",
+   "attribution": "Not required. Optional credit: 'Kenney'",
+   "price": "free",
+   "formats": "not stated on the page; model file names unknown until downloaded",
+   "required": true,
+   "usedIn": [
+    "scene factory, view line: conveyor belt, machine, crate (Long, chapter 6)"
+   ],
+   "targetDir": "assets/shared/kenney-factory-kit",
+   "files": {
+    "conveyor": null,
+    "machine": null,
+    "crate": null
+   },
+   "status": "missing",
+   "checkedOn": "2026-11-16",
+   "note": "Logical names; mapped to real files after download."
+  },
+  {
+   "id": "kenney-mini-shop",
+   "name": "Mini Shop 2.1 (page URL slug: mini-market)",
+   "author": "Kenney (kenney.nl)",
+   "sourceUrl": "https://kenney.nl/assets/mini-market",
+   "license": "Creative Commons CC0 (public domain); commercial use allowed",
+   "attribution": "Not required. Optional credit: 'Kenney'",
+   "price": "free",
+   "formats": "not stated on the page; model file names unknown until downloaded",
+   "required": true,
+   "usedIn": [
+    "scene factory, view freezer: supermarket freezer case (Long, chapter 6)"
+   ],
+   "targetDir": "assets/shared/kenney-mini-shop",
+   "files": {
+    "freezer": null
+   },
+   "status": "missing",
+   "checkedOn": "2026-11-16",
+   "note": "Logical name; mapped to a real file after download."
+  },
+  {
+   "id": "kenney-food-kit",
+   "name": "Food Kit 2.0",
+   "author": "Kenney (kenney.nl)",
+   "sourceUrl": "https://kenney.nl/assets/food-kit",
+   "license": "Creative Commons CC0 (public domain); commercial use allowed",
+   "attribution": "Not required. Optional credit: 'Kenney'",
+   "price": "free",
+   "formats": "not stated on the page; model file names unknown until downloaded",
+   "required": false,
+   "usedIn": [
+    "optional dressing: extra breads, cups and plates for bakery shelves and the diner counter"
+   ],
+   "targetDir": "assets/shared/kenney-food-kit",
+   "files": {},
+   "status": "missing",
+   "checkedOn": "2026-11-16"
+  },
+  {
+   "id": "kenney-furniture-kit",
+   "name": "Furniture Kit 1.0",
+   "author": "Kenney (kenney.nl)",
+   "sourceUrl": "https://kenney.nl/assets/furniture-kit",
+   "license": "Creative Commons CC0 (public domain); commercial use allowed",
+   "attribution": "Not required. Optional credit: 'Kenney'",
+   "price": "free",
+   "formats": "not stated on the page; model file names unknown until downloaded",
+   "required": false,
+   "usedIn": [
+    "optional dressing: café chairs and tables behind the hero plate"
+   ],
+   "targetDir": "assets/shared/kenney-furniture-kit",
+   "files": {},
+   "status": "missing",
+   "checkedOn": "2026-11-16"
+  }
+ ]
+}

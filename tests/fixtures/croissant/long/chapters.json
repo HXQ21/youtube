@@ -1,0 +1,105 @@
+{
+ "note": "Mốc chương và gợi ý điểm nghỉ quảng cáo (tham khảo khi đặt mid-roll trong YouTube Studio; không tự bật quảng cáo).",
+ "youtubeChapters": [
+  "0:00 The most French pastry?",
+  "0:35 Vienna's crescent roll: the kipfel",
+  "1:48 The siege, the queen, and two legends",
+  "3:37 August Zang's Viennese bakery in Paris",
+  "5:21 How butter layers made the modern croissant",
+  "7:18 Factories, freezers and fast food",
+  "8:19 So, is it French?"
+ ],
+ "chapters": [
+  {
+   "id": "ch1",
+   "title": "The most French pastry?",
+   "startSec": 0.6,
+   "endSec": 35.43,
+   "startFrame": 18,
+   "endFrame": 1063,
+   "words": 94,
+   "targetSec": 45,
+   "adBreakBefore": false
+  },
+  {
+   "id": "ch2",
+   "title": "Vienna's crescent roll: the kipfel",
+   "startSec": 35.98,
+   "endSec": 107.823,
+   "startFrame": 1079,
+   "endFrame": 3235,
+   "words": 186,
+   "targetSec": 95,
+   "adBreakBefore": false
+  },
+  {
+   "id": "ch3",
+   "title": "The siege, the queen, and two legends",
+   "startSec": 108.372,
+   "endSec": 217.134,
+   "startFrame": 3251,
+   "endFrame": 6514,
+   "words": 278,
+   "targetSec": 105,
+   "adBreakBefore": false
+  },
+  {
+   "id": "ch4",
+   "title": "August Zang's Viennese bakery in Paris",
+   "startSec": 217.685,
+   "endSec": 320.597,
+   "startFrame": 6531,
+   "endFrame": 9618,
+   "words": 257,
+   "targetSec": 115,
+   "adBreakBefore": true
+  },
+  {
+   "id": "ch5",
+   "title": "How butter layers made the modern croissant",
+   "startSec": 321.146,
+   "endSec": 437.571,
+   "startFrame": 9634,
+   "endFrame": 13127,
+   "words": 285,
+   "targetSec": 120,
+   "adBreakBefore": false
+  },
+  {
+   "id": "ch6",
+   "title": "Factories, freezers and fast food",
+   "startSec": 438.12,
+   "endSec": 499.095,
+   "startFrame": 13144,
+   "endFrame": 14973,
+   "words": 159,
+   "targetSec": 80,
+   "adBreakBefore": true
+  },
+  {
+   "id": "ch7",
+   "title": "So, is it French?",
+   "startSec": 499.646,
+   "endSec": 532.943,
+   "startFrame": 14989,
+   "endFrame": 15988,
+   "words": 88,
+   "targetSec": 40,
+   "adBreakBefore": false
+  }
+ ],
+ "adBreaks": [
+  {
+   "beforeChapter": "ch4",
+   "sec": 217.41,
+   "frame": 6522,
+   "pauseSec": 0.55
+  },
+  {
+   "beforeChapter": "ch6",
+   "sec": 437.85,
+   "frame": 13136,
+   "pauseSec": 0.55
+  }
+ ]
+}

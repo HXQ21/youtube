@@ -8,14 +8,17 @@ import { execFileSync, spawnSync } from "node:child_process";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "food-test-"));
 const epDir = path.join(tmp, "episodes");
-fs.cpSync(path.resolve("episodes/croissant"), path.join(epDir, "croissant"), { recursive: true, filter: (s) => !/[\\/](voice|audio)([\\/]|$)/.test(s) && !/timeline.*\.json$/.test(s) });
+// the test episode is a fixture (tests/fixtures/croissant: script, storyboard, sources, config; no audio, no video), so the
+// tests never depend on a real episode in episodes/ (2026-11-26: the user removed every made video and its material)
+const FIX = path.resolve("tests/fixtures/croissant");
+fs.cpSync(FIX, path.join(epDir, "croissant"), { recursive: true });
 process.env.FOOD_EPISODES_DIR = epDir;
 process.env.FOOD_OUT_DIR = path.join(tmp, "out"); // status files written by CLI runs in the tests stay out of the real out/
 const cfg = await import("../scripts/lib/config.mjs");
 const tlm = await import("../scripts/lib/timeline.mjs");
 const el = await import("../scripts/lib/eleven.mjs");
 const edit = (rel, fn) => { const f = path.join(epDir, "croissant", rel), j = JSON.parse(fs.readFileSync(f, "utf8")); fn(j); fs.writeFileSync(f, JSON.stringify(j)); };
-const restore = (rel) => fs.copyFileSync(path.resolve("episodes/croissant", rel), path.join(epDir, "croissant", rel));
+const restore = (rel) => fs.copyFileSync(path.join(FIX, rel), path.join(epDir, "croissant", rel));
 
 // ------------------------------------------------------------ presets and overrides
 test("presets: short is 75 s vertical, long is 600 s (480-720) horizontal, both 30 fps; Shorts carry captions", () => {
@@ -111,7 +114,7 @@ test("dish workflow: new scaffolds an episode and makes it current; stages are l
   assert.equal(r.stats.years, 2); assert.equal(r.stats.numbers, 2); // "twenty-seven" counts once; vague "hundreds" is not data
   assert.match(r.errors.join(), /c9/); assert.deepEqual(r.stats.softClaims, ["b:c2=legend"]);
   assert.equal(r.warnings.length, 3, r.warnings.join("\n"));
-  const demo = pl.checkScript("short", JSON.parse(fs.readFileSync(path.resolve("episodes/croissant/short/script.json"), "utf8")), JSON.parse(fs.readFileSync(path.resolve("episodes/croissant/sources.json"), "utf8")));
+  const demo = pl.checkScript("short", JSON.parse(fs.readFileSync(path.join(FIX, "short/script.json"), "utf8")), JSON.parse(fs.readFileSync(path.join(FIX, "sources.json"), "utf8")));
   assert.deepEqual(demo.errors, []); assert.equal(demo.stats.years, 1); assert.equal(demo.stats.numbers, 1);
   const st = pl.setStatus("test-dish", "short", { step: "render", pct: 10 }, "start"); assert.equal(st.pct, 10);
   const st2 = pl.setStatus("test-dish", "short", (o) => ({ pct: o.pct + 5 })); assert.equal(st2.pct, 15); assert.equal(st2.log.length, 1);
@@ -280,7 +283,8 @@ test("importing existing audio + word timings works, and a word-count mismatch i
 });
 
 // ------------------------------------------------------------ CLI behaviour on missing input
-const cli = (...a) => spawnSync(process.execPath, ["scripts/food.mjs", ...a], { encoding: "utf8", env: { ...process.env, FOOD_EPISODES_DIR: "" } });
+// the CLI runs on the test copy of the fixture episode (no real episode is kept in episodes/)
+const cli = (...a) => spawnSync(process.execPath, ["scripts/food.mjs", ...a], { encoding: "utf8", env: { ...process.env } });
 test("CLI: final render stops with the asset id and folder when a required asset is missing; bad options explain themselves", () => {
   const r = cli("render", "--episode", "croissant", "--format", "long", "--quality", "final"), out = r.stdout + r.stderr;
   if (/thiếu asset bắt buộc/.test(out)) { assert.equal(r.status, 1); assert.match(out, /kenney-\w+-kit|kenney-mini-shop/); assert.match(out, /DOWNLOAD_GUIDE\.md/); }
@@ -310,12 +314,14 @@ test("film: AI segments never cross a location or a shot, stay <= 15 s, and shor
   const k = film.segmentKey(tl2, s2[0]), moved = { ...tl2, events: [{ ...tl2.events[0], frame: 43 }] };
   assert.notEqual(film.segmentKey(moved, s2[0]), k);                                  // emphasis moved inside s01
   assert.equal(film.segmentKey(moved, s2[1]), film.segmentKey(tl2, s2[1]));          // s02 untouched
-  // final takes only an approved clip made for this key; preview falls back to the matching guide; stale is never used
-  const m = (key, approved) => ({ key, approved });
-  assert.equal(film.chooseClip(s2[0], k, { ai: m(k, false), guide: m(k) }, true), null);
-  assert.equal(film.chooseClip(s2[0], k, { ai: m(k, true), guide: null }, true).kind, "ai");
-  assert.equal(film.chooseClip(s2[0], k, { ai: m("old", true), guide: m(k) }, false).kind, "guide");
-  assert.equal(film.chooseClip(s2[0], k, { ai: m("old", true), guide: m("old") }, false), null);
+  // no Seedance (2026-11-26): final takes only a Blender render at final quality for this key; preview any matching
+  // guide; AI clips are never used; stale is never used
+  const m = (key, approved) => ({ key, approved }), gq = (key, quality) => ({ key, quality });
+  assert.equal(film.chooseClip(s2[0], k, { ai: m(k, true), guide: gq(k, "preview") }, true), null);
+  assert.equal(film.chooseClip(s2[0], k, { ai: m(k, true), guide: null }, true), null);
+  assert.equal(film.chooseClip(s2[0], k, { ai: null, guide: gq(k, "final") }, true).kind, "blender");
+  assert.equal(film.chooseClip(s2[0], k, { ai: m(k, true), guide: gq(k, "preview") }, false).kind, "guide");
+  assert.equal(film.chooseClip(s2[0], k, { ai: null, guide: gq("old", "final") }, false), null);
   const pics = film.picturesFor(s2, (g) => (g.id === "s01" ? { src: "ai/s01.mp4", kind: "ai", approved: true } : null));
   assert.deepEqual(pics.map((p) => p && p.kind), ["ai", null, null, null]);
   // Seedance gets the cast sheets of who is on screen, longest screen time first; a type with no sheet is reported

@@ -395,3 +395,115 @@ def render_still(sc, cam, path):
         if win and old and old != sc:
             win.scene = old
     return sc.render.filepath
+
+
+# ---------------------------------------------------------------- set files (episode pipeline contract)
+def prism(col, name, profile, y0, y1, m=None, axis="Y", bevel=0.0):
+    """a 2D profile [(u, z), ...] extruded between y0 and y1 along Y (u = x), or along X (axis "X": u = y)"""
+    me = bpy.data.meshes.new(name)
+    n = len(profile)
+    if axis == "Y":
+        verts = [(u, y0, z) for u, z in profile] + [(u, y1, z) for u, z in profile]
+    else:
+        verts = [(y0, u, z) for u, z in profile] + [(y1, u, z) for u, z in profile]
+    faces = [tuple(range(n)), tuple(range(2 * n - 1, n - 1, -1))] + [(i, (i + 1) % n, n + (i + 1) % n, n + i) for i in range(n)]
+    me.from_pydata(verts, [], faces)
+    me.validate()
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(me)
+    bm.free()
+    return _ob(col, name, me, m, bevel)
+
+
+def text(col, name, body, loc, rot, size, m, align="CENTER", extrude=0.01):
+    cu = bpy.data.curves.new(name, "FONT")
+    cu.body, cu.size, cu.extrude, cu.align_x, cu.align_y = body, size, extrude, align, "CENTER"
+    for fn in ("C:/Windows/Fonts/georgiab.ttf", "C:/Windows/Fonts/georgia.ttf"):
+        if os.path.exists(fn):
+            cu.font = bpy.data.fonts.load(fn, check_existing=True)
+            break
+    cu.materials.append(m)
+    ob = bpy.data.objects.new(name, cu)
+    ob.location, ob.rotation_euler = loc, rot
+    col.objects.link(ob)
+    return ob
+
+
+def subject_box(col, name, x0, x1, y0, y1, z0, z1, parent=None):
+    """SUBJ-<name>: a fully transparent box around the hero object (food shapes are curves, the framing check in
+    blender/shot.py measures meshes named SUBJ-*). It renders as nothing and casts no shadow."""
+    m = bpy.data.materials.get("subject_clear")
+    if m is None:
+        m = bpy.data.materials.new("subject_clear")
+        m.use_nodes = True
+        nt = m.node_tree
+        nt.nodes.clear()
+        tr = nt.nodes.new("ShaderNodeBsdfTransparent")
+        nt.links.new(tr.outputs[0], nt.nodes.new("ShaderNodeOutputMaterial").inputs[0])
+        for attr, val in (("surface_render_method", "BLENDED"), ("use_transparent_shadow", True)):
+            try:
+                setattr(m, attr, val)
+            except Exception:
+                pass
+    ob = box(col, f"SUBJ-{name}", x0, x1, y0, y1, z0, z1, m, 0)
+    ob.visible_shadow = False
+    ob.visible_diffuse = ob.visible_glossy = False
+    if parent is not None:
+        ob.parent = parent
+    return ob
+
+
+def set_cams(sc, cams, col_name="Cams"):
+    """CAM-<name> cameras with custom props kind / chars (cams: name -> dict(loc, aim, fov, kind, chars))"""
+    C = coll(sc, col_name)
+    out = {}
+    for k, v in cams.items():
+        cam = camera(C, f"CAM-{k}", v["loc"], v["aim"], v.get("fov", 55))
+        cam.data.name = f"CAM-{k}"
+        cam["kind"], cam["chars"] = v.get("kind", "medium"), bool(v.get("chars", True))
+        if v.get("fstop"):
+            cam.data.dof.aperture_fstop = v["fstop"]
+        for prop in ("push", "side"):                 # blender/shot.py drift of a single-name camera
+            if v.get(prop) is not None:
+                cam[prop] = float(v[prop])
+        out[k] = cam
+    return out
+
+
+def set_marks(sc, marks, acts, col_name="Marks"):
+    """MARK-<role> (feet; local +Y = facing direction given as (fx, fy)) and ACT-<name> anchors"""
+    M = coll(sc, col_name)
+    for role, (loc, f) in marks.items():
+        ob = bpy.data.objects.new(f"MARK-{role}", None)
+        ob.empty_display_type, ob.empty_display_size = "SINGLE_ARROW", 0.5
+        ob.location, ob.rotation_euler = loc, (0, 0, math.atan2(-f[0], f[1]))
+        M.objects.link(ob)
+    for k, loc in acts.items():
+        ob = bpy.data.objects.new(f"ACT-{k}", None)
+        ob.empty_display_type, ob.empty_display_size = "SPHERE", 0.08
+        ob.location = loc
+        M.objects.link(ob)
+    return M
+
+
+def world(name, top, strength=1.0):
+    w = bpy.data.worlds.get(name) or bpy.data.worlds.new(name)
+    w.use_nodes = True
+    nt = w.node_tree
+    nt.nodes.clear()
+    bg = nt.nodes.new("ShaderNodeBackground")
+    bg.inputs["Color"].default_value = hex_lin(top) if isinstance(top, str) else top
+    bg.inputs["Strength"].default_value = strength
+    nt.links.new(bg.outputs[0], nt.nodes.new("ShaderNodeOutputWorld").inputs[0])
+    return w
+
+
+def save_scene(sc, path):
+    """write only this scene (and what it uses) to a .blend"""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    # also every world: the unused ones (bk_world_night, st_world_golden) are what the set module switches to, and
+    # libraries.write only follows what the scene uses (FEEDBACK: the night world was missing from bakery.blend)
+    bpy.data.libraries.write(path, {sc, *bpy.data.worlds}, fake_user=True, path_remap="RELATIVE_ALL", compress=True)
+    return path

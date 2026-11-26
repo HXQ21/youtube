@@ -375,15 +375,23 @@ def draw_side(p, o, phase=0.0, expr="neutral", blink=False, stride=0.72):
         legs.append((fx, sole - 4 - lift, ph))
     for fx, fy, ph in legs:
         col = mix_hex(o.get("legs", INK), "#000000", 0.3) if ph == 0.5 else o.get("legs", INK)
-        p.stroke([(cx, tb - 8), (fx, fy - 14)], B["leg"], col)
+        hip = (cx + (7 if ph == 0.0 else -7), tb - 8)
+        lift = (sole - 4) - fy
+        knee = ((hip[0] + fx) / 2 + 0.55 * lift + 4, (hip[1] + fy - 14) / 2 - 0.25 * lift)   # the lifted leg bends forward
+        leg = [hip, knee, (fx, fy - 14)]
+        if o.get("trousers"):
+            tc = mix_hex(o["trousers"], "#000000", 0.18) if ph == 0.5 else o["trousers"]
+            p.stroke(leg[:2] + [((knee[0] + fx) / 2, (knee[1] + fy - 14) / 2)], 34, INK)
+            p.stroke(leg[:2] + [((knee[0] + fx) / 2, (knee[1] + fy - 14) / 2)], 34 - 2 * 5, tc)
+            p.stroke([((knee[0] + fx) / 2, (knee[1] + fy - 14) / 2), (fx, fy - 14)], B["leg"], col)
+        else:
+            p.stroke(leg, B["leg"], col)
         p.poly(rrect(fx - 16, fy - 22, fx + 30, fy + 2, 11), o.get("shoes", "#2a1c18"), 5)
     sw = math.sin(two * phase) * 38
     # far arm
     _arm(p, (cx - 4, neck + 30), (cx - sw, tb - 40), -1, skin, None)
     if o.get("dress"):
         p.poly(trap(cx, neck + 40, sole - 70, B["tw1"] * 0.6, B["tw1"] * 0.95, 20), o["dress"], OL)
-    elif o.get("trousers"):
-        p.poly(rrect(cx - 20, tb - 30, cx + 20, tb + 120, 8), o["trousers"], OL)
     elif o.get("shorts") and not o.get("apron"):
         p.poly(rrect(cx - B["tw1"] * 0.62, tb - 30, cx + B["tw1"] * 0.62, tb + 60, 10), o["shorts"], OL)
     p.poly(trap(cx, neck, tb, B["tw0"] * 0.8, B["tw1"] * 0.82), o.get("dress") or o["jacket"], OL)

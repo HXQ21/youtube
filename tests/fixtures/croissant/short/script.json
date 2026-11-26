@@ -1,0 +1,19 @@
+{
+ "locale": "en-US",
+ "title": "France's most famous pastry started out Austrian",
+ "segments": [
+  { "id": "t01", "chapter": "hook", "text": "France's most famous pastry started out Austrian.", "claims": ["c01", "c05", "c07"], "note": "Hook: breaks a belief in under 3 seconds." },
+  { "id": "t02", "chapter": "hook", "text": "And the man who brought it to Paris wasn't a baker. He was a soldier.", "claims": ["c05"], "note": "Open loop, paid off at t06-t07." },
+  { "id": "t03", "chapter": "origin", "text": "Long before the croissant, Vienna had the kipfel: a soft little bread roll shaped like a crescent moon.", "claims": ["c01"] },
+  { "id": "t04", "chapter": "origin", "text": "Legend says bakers invented it after saving the city from an enemy army. Danger, heroes, breakfast. Great story.", "claims": ["c03"] },
+  { "id": "t05", "chapter": "origin", "text": "Not true. The roll was already hundreds of years old.", "claims": ["c03", "c01", "c02"] },
+  { "id": "t06", "chapter": "paris", "text": "So how did it get to France? Enter the soldier.", "note": "Re-hook at the midpoint." },
+  { "id": "t07", "chapter": "paris", "text": "In the 1830s, August Zang, an ex-army officer from Vienna, opened a bakery in Paris. Business boomed.", "claims": ["c05", "c07"] },
+  { "id": "t08", "chapter": "paris", "text": "French bakers copied his roll and named it after its shape. Croissant. Crescent.", "claims": ["c07", "c19"] },
+  { "id": "t09", "chapter": "layers", "text": "But here's the twist: it still wasn't flaky. It was just bread.", "claims": ["c10"] },
+  { "id": "t10", "chapter": "layers", "text": "Then French bakers tried something. Fold butter into the dough. Roll. Fold again. And again.", "claims": ["c10", "c12"] },
+  { "id": "t11", "chapter": "layers", "text": "One layer of butter becomes twenty-seven. In the oven, steam blows them apart.", "claims": ["c12"] },
+  { "id": "t12", "chapter": "close", "text": "That shatter when you bite in? That's the French part.", "claims": ["c10", "c12"] },
+  { "id": "t13", "chapter": "close", "text": "The shape? Still Austrian.", "claims": ["c01"], "note": "Loops back to the first line." }
+ ]
+}

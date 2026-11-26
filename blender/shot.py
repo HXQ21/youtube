@@ -368,7 +368,8 @@ def main():
     os.makedirs(out, exist_ok=True)
     seen = [{"id": c.cid, "who": c.who, "v": c.v, "frames": sum(1 for k in c.shown.values() if k is not None)} for c in people.values()]
     json.dump([x for x in seen if x["frames"]], open(os.path.join(out, "cast.json"), "w", encoding="utf-8"), indent=1)
-    # quick layout render: Eevee, few samples; no ink, no grade (Seedance paints the final look)
+    # Eevee. draft / preview = quick layout; final = the picture itself (2026-11-26: no Seedance), with the channel look
+    # from blender/look.py (ink lines on the set, optional cel bands): --look ink|toon|none, default ink for final
     for eng in ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE"):
         try:
             sc.render.engine = eng
@@ -398,6 +399,10 @@ def main():
     if chk:
         names = sorted({f'{i["what"]} ({i["name"]})' for i in chk})
         log(f"CHÚ Ý khung hình: {len(chk)} lần kiểm có lỗi: {'; '.join(names[:6])}")
+    look_mode = o.get("look") or ("ink" if quality == "final" else "none")
+    if look_mode != "none":
+        import look
+        look.apply(sc, tl["height"], look_mode)
     sc.frame_set(sc.frame_start)
     log(f"{scene_id}: {seg['id']} khung {a}-{b - 1}, {len(people)} nhân vật, {sum(len(c.cards) for c in people.values())} thẻ tư thế, {quality}")
     bpy.ops.render.render(animation=True)

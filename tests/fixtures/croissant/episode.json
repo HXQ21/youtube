@@ -1,0 +1,28 @@
+{
+ "id": "croissant",
+ "dish": "Croissant",
+ "englishName": "Croissant",
+ "nativeNames": [
+  { "name": "croissant", "lang": "fr", "pronunciation": "French: kwah-SAHN; American English: kruh-SAHNT", "note": "French for 'crescent'" },
+  { "name": "Kipferl", "lang": "de-AT", "pronunciation": "KIP-ferl", "note": "Austrian German; older and also current spelling: Kipfel (KIP-fel). The croissant's ancestor, still baked today." }
+ ],
+ "aliases": ["Kipfel", "Hörnchen", "butter croissant", "croissant au beurre"],
+ "culturalRegions": ["Austria (Vienna)", "France (Paris)"],
+ "originNote": "Shared history: a Viennese shape (the kipfel) that became a French laminated pastry in Paris. Not attributed to a single country.",
+ "locale": "en-US",
+ "voice": {
+  "provider": "elevenlabs",
+  "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+  "voiceName": "Bella - Professional, Bright, Warm (premade; labels: female, american, informative_educational)",
+  "modelId": "eleven_multilingual_v2",
+  "outputFormat": "mp3_44100_128",
+  "settings": { "stability": 0.42, "similarity_boost": 0.78, "style": 0.3, "use_speaker_boost": true, "speed": 0.93 },
+  "pronunciations": [
+   { "written": "Kaisersemmel", "tts": "Kaiser-semmel", "note": "German: KY-zer-zem-mel" },
+   { "written": "Croissan'wich", "tts": "Croissan-wich" }
+  ],
+  "chunkMaxChars": 4500,
+  "chunkGapSec": 0.55,
+  "budget": { "maxTotalChars": 14000, "maxRegenerations": 1 }
+ }
+}

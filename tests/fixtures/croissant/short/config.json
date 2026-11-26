@@ -1,0 +1,10 @@
+{
+ "format": "short",
+ "render": {},
+ "leadInSec": 0.15,
+ "tailPadSec": 0.6,
+ "estimateWpm": 155,
+ "voiceSettings": { "speed": 1.0 },
+ "music": { "style": "cafe", "gainDb": -20, "duckDb": -9, "file": null },
+ "sfxGainDb": -13
+}

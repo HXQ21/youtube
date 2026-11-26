@@ -54,13 +54,14 @@ export const picturesFor = (segments, choose) => segments.map((g) => {
 });
 
 /** which clip a segment may use. manifests: { ai, guide } = the sidecar JSON of ai/sNN.mp4 and guide/sNN.mp4 (or
- *  null). Final: only an AI clip the user approved for this exact segment key. Preview: the newest matching clip,
- *  else the matching guide. Anything made for another key is stale and never used. */
+ *  null). 2026-11-26 the user dropped Seedance ("loại bỏ seedance sử dụng blender"): the picture is Blender's own
+ *  render, so AI clips are never used. Final: only a guide rendered at --quality final (ink look, blender/look.py) for
+ *  this exact segment key. Preview: any matching guide. Anything made for another key is stale and never used. */
 export const chooseClip = (g, key, manifests, final) => {
-  const ai = manifests.ai, guide = manifests.guide;
-  if (ai && ai.key === key && (ai.approved || !final)) return { src: `ai/${g.id}.mp4`, kind: "ai", approved: !!ai.approved };
-  if (!final && guide && guide.key === key) return { src: `guide/${g.id}.mp4`, kind: "guide" };
-  return null;
+  const guide = manifests.guide;
+  if (!guide || guide.key !== key) return null;
+  if (guide.quality === "final") return { src: `guide/${g.id}.mp4`, kind: "blender" };
+  return final ? null : { src: `guide/${g.id}.mp4`, kind: "guide" };
 };
 
 /** cast sheets for the people on screen (cast = shot.py's cast.json: [{who, v, frames}]), most screen time first, one

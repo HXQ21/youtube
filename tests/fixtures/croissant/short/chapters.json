@@ -1,0 +1,68 @@
+{
+ "note": "Mốc chương và gợi ý điểm nghỉ quảng cáo (tham khảo khi đặt mid-roll trong YouTube Studio; không tự bật quảng cáo).",
+ "youtubeChapters": [
+  "0:00 Not French after all",
+  "0:08 The kipfel and the legend",
+  "0:27 The soldier's bakery",
+  "0:44 Butter changes everything",
+  "1:01 French part, Austrian shape"
+ ],
+ "chapters": [
+  {
+   "id": "hook",
+   "title": "Not French after all",
+   "startSec": 0.15,
+   "endSec": 7.708,
+   "startFrame": 5,
+   "endFrame": 231,
+   "words": 22,
+   "targetSec": null,
+   "adBreakBefore": false
+  },
+  {
+   "id": "origin",
+   "title": "The kipfel and the legend",
+   "startSec": 8.312,
+   "endSec": 26.655,
+   "startFrame": 249,
+   "endFrame": 800,
+   "words": 46,
+   "targetSec": null,
+   "adBreakBefore": false
+  },
+  {
+   "id": "paris",
+   "title": "The soldier's bakery",
+   "startSec": 27.097,
+   "endSec": 44.001,
+   "startFrame": 813,
+   "endFrame": 1320,
+   "words": 40,
+   "targetSec": null,
+   "adBreakBefore": false
+  },
+  {
+   "id": "layers",
+   "title": "Butter changes everything",
+   "startSec": 44.442,
+   "endSec": 60.708,
+   "startFrame": 1333,
+   "endFrame": 1821,
+   "words": 40,
+   "targetSec": null,
+   "adBreakBefore": false
+  },
+  {
+   "id": "close",
+   "title": "French part, Austrian shape",
+   "startSec": 61.149,
+   "endSec": 67.256,
+   "startFrame": 1834,
+   "endFrame": 2018,
+   "words": 14,
+   "targetSec": null,
+   "adBreakBefore": false
+  }
+ ],
+ "adBreaks": []
+}
